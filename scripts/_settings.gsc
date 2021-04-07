@@ -411,7 +411,7 @@
 
 // When true, sets the host player to become invulnerable
 // default value: false
-#define DEV_GODMODE = false;
+#define DEV_GODMODE = true;
 
 // When true, gives the host player 25000 starting points
 // default value: false
@@ -439,11 +439,11 @@
 
 // When true, allows the host to fly with the grenade button and sprint
 // default value: false
-#define DEV_NOCLIP = true;
+#define DEV_NOCLIP = false;
 
 // When true, allows the host player to see enemy players through walls
 // default value: false
-#define DEV_SIGHT = false;
+#define DEV_SIGHT = true;
 
 // When true, forces the host player to be on a team which is not allies
 // default value: false
@@ -636,6 +636,12 @@
 #endregion
 
 // add your custom maps here
+// NOTE: Most custom maps are made by devs who only add 1 zone, or only put spawns in 1 zone.
+//       this means that to generate spawns on this map, I have to do some really annoying nav query stuff that produces 
+//       weird artifacts sometimes and may not be 100% reliable. 
+//       If you are a map creator and enjoy this game mode,
+//       make sure you take the time to place player spawns. They are kind of important.
+//       
 custom_maps()
 {
     switch(level.script)
@@ -657,7 +663,7 @@ custom_maps()
             // thread zm_custom_map_name_init();
             break;
         default:
-            // TODO: autogenerate spawn locations per map
+            gm_generate_spawns();
             return;
     }
 }

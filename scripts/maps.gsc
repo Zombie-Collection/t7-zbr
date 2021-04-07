@@ -14,6 +14,11 @@ initmaps()
     {
         level.limited_weapons[GetWeapon("raygun_mark2")] = 4;
     }
+
+    if(!isdefined(level.b_use_poi_spawn_system))
+    {
+        level.b_use_poi_spawn_system = false;
+    }
     
     level.gm_spawns = [];
     level.gm_blacklisted = [];
@@ -151,9 +156,12 @@ initmaps()
 }
 
 //should only be used at game start
-GetRandomMapSpawn(player, return_struct = false)
+GetRandomMapSpawn(player, return_struct = false, ignore_poi = false)
 {
     initmaps();
+
+    if(!ignore_poi && (isdefined(level.b_use_poi_spawn_system) && level.b_use_poi_spawn_system))
+        return gm_select_poi_spawn(player, return_struct);
 
     if(!isdefined(level.gm_spawns) || level.gm_spawns.size < 1)
     {
@@ -1185,4 +1193,342 @@ zm_mechz_roundNext()
 {
     if(!isdefined(level.mechz_round_count)) return;
     level.mechz_round_count = 1;
+}
+
+// CUSTOM MAPS SPAWN LOGIC
+
+// Automatically detects bad zones, and populates the gm_spawns array to the best of its ability.
+// Algorithm is just a simple furthest neightbor implementation. Far from perfect, but will at least hopefully allow support for custom maps.
+gm_generate_spawns()
+{
+    zones = [];
+    foreach(k, v in level.zones)
+    {
+        if(isSubStr(k, "boss") || isSubStr(k, "arena") || isSubStr(k, "secret") || isSubStr(k, "egg"))
+        {
+            level.gm_blacklisted[level.gm_blacklisted.size] = k;
+            continue;
+        }
+        zones[zones.size] = k;
+    }
+    spawns = CollectAllSpawns(zones);
+    a_s_furthest = gm_search_spawns(spawns, 4);
+
+    // Now locate the zone each point chosen is in
+    foreach(point in a_s_furthest)
+    {
+        foreach(zone in zones)
+        {
+            if(is_point_inside_zone(point.origin, zone))
+            {
+                level.gm_spawns[level.gm_spawns.size] = zone;
+                break;
+            }
+        }
+    }
+
+    if(level.gm_spawns.size < 4)
+    {
+        foreach(zone in level.gm_spawns)
+        {
+            arrayremovevalue(zones, zone, false);
+        }
+
+        zones = array::randomize(zones);
+        foreach(zone in zones)
+        {
+            spawns = GetAllSpawnsFromZone(level.players[0], zone);
+            if(!spawns.size) continue;
+            level.gm_spawns[level.gm_spawns.size] = zone;
+            if(level.gm_spawns.size >= 4) return;
+        }
+    }
+
+    if(level.gm_spawns.size < 4)
+    {
+        level.b_use_poi_spawn_system = true;
+        gm_generate_poi_spawns();
+    }
+}
+
+gm_search_spawns(a_s_spawns = [], n_max = 4)
+{
+    remaining_points = array::randomize(arraycopy(a_s_spawns));
+    solution_set = [array::pop_front(remaining_points, false)];
+
+    while(n_max > 1)
+    {
+        a_n_distances = [];
+
+        foreach(spawn in remaining_points)
+        {
+            a_n_distances[a_n_distances.size] = int(distance2d(solution_set[0].origin, spawn.origin));
+        }
+
+        foreach(k_point, v_point in remaining_points)
+        {
+            foreach(k_ans, v_ans in solution_set)
+            {
+                a_n_distances[k_point] = int(min(a_n_distances[k_point], distance2d(v_point.origin, v_ans.origin)));
+            }
+        }
+
+        i_max = 0;
+        v_max = 0;
+        foreach(k, v in a_n_distances)
+        {
+            if(v > v_max)
+            {
+                v_max = v;
+                i_max = k;
+            }
+        }
+
+        array::add(solution_set, array::pop(remaining_points, i_max, false));
+        n_max--;
+    }
+
+    return solution_set;
+}
+
+CollectAllSpawns(zones)
+{
+    spawns = [];
+    foreach(k in zones)
+    {
+        spawns = arraycombine(spawns, GetAllSpawnsFromZone(level.players[0], k), false, false);
+    }
+    return spawns;
+}
+
+gm_select_poi_spawn(player, return_struct = false)
+{
+    gm_generate_poi_spawns();
+
+    // 1. Select furthest, non-visible spawn from all players on the map, via the POI cache array
+    position = gm_search_pois(level.a_v_poi_spawns, player);
+
+    if(!isdefined(position))
+    {
+        return GetRandomMapSpawn(player, return_struct, true);
+    }
+
+    // 2. Do 8 bullet traces in a pitch circle, from origin + 70 and take the furthest result as the angles for the spawner
+        // This should automatically make the player look away from walls, etc.
+
+    s_spawn = spawnStruct();
+    s_spawn.origin = position;
+    
+    i_max = 0;
+    d_max = 0;
+    for(i = 0; i < 8; i++)
+    {
+        n_angle = (i * (360 / 8)) - 180;
+        trace = bullettrace(position + (0, 0, 70), position + (0, 0, 70) + VectorScale(anglesToForward((0, n_angle, 0)), 10000), 0, undefined);
+        n_dist = distance2d(trace["position"], position + (0, 0, 70));
+        if(n_dist > d_max)
+        {
+            d_max = n_dist;
+            i_max = i;
+        }
+    }
+
+    n_angle = (i_max * (360 / 8)) - 180;
+    s_spawn.angles = (0, n_angle, 0);
+    
+    return s_spawn;
+}
+
+//GetClosestPointOnNavMesh
+//ispointonnavmesh
+//positionquery_source_navigation
+gm_generate_poi_spawns()
+{
+    if(isdefined(level.a_v_poi_spawns)) return;
+    // 1. Locate all points of player interest
+        // A. Perk Machines
+        // B. Mystery Boxes
+        // C. Gobblegum Machines
+        // D. Doors
+        // E. Wall buys
+    
+    a_v_poi = [];
+    a_v_poi = arraycombine(a_v_poi, gm_find_pap_origins(), false, false);
+    a_v_poi = arraycombine(a_v_poi, gm_find_perk_origins(), false, false);
+    a_v_poi = arraycombine(a_v_poi, gm_find_box_origins(), false, false);
+    a_v_poi = arraycombine(a_v_poi, gm_find_gum_origins(), false, false);
+    a_v_poi = arraycombine(a_v_poi, gm_find_door_origins(), false, false);
+    a_v_poi = arraycombine(a_v_poi, gm_find_wallbuy_origins(), false, false);
+    a_v_poi = array::remove_undefined(a_v_poi, false);
+
+    // 2. For each poi, positionquery_source_navigation
+        // Foreach returned point, check ispointonnavmesh
+        // when one is, this is a spawn point.
+
+    if(!isdefined(level.struct_class_names["targetname"]["poi_spawn_point"]))
+    {
+        level.struct_class_names["targetname"]["poi_spawn_point"] = [];
+    }
+    if(!isdefined(level.struct_class_names["targetname"]["player_respawn_point"]))
+    {
+        level.struct_class_names["targetname"]["player_respawn_point"] = [];
+    }
+    level.a_v_poi_spawns = [];
+    foreach(v_point in a_v_poi)
+    {
+        points = util::positionquery_pointarray(v_point, 50, 300, 100, 50);
+        if(!isdefined(points)) continue;
+        points = array::randomize(points);
+        foreach(potential in points)
+        {
+            if(ispointonnavmesh(potential, level.players[0]) && zm_utility::check_point_in_playable_area(potential))
+            {
+                level.a_v_poi_spawns[level.a_v_poi_spawns.size] = potential;
+                s_spawn = spawnStruct();
+                s_spawn.origin = potential;
+                s_spawn.targetname = "poi_spawn_point";
+                array::add(level.struct_class_names["targetname"]["poi_spawn_point"], s_spawn, false);
+                break;
+            }
+        }
+    }
+    s_respawner = spawnStruct();
+    s_respawner.targetname = "player_respawn_point";
+    s_respawner.target = "poi_spawn_point";
+    array::add(level.struct_class_names["targetname"]["player_respawn_point"], s_respawner, false);
+}
+
+gm_find_pap_origins()
+{
+    a_v_paps = [];
+    foreach(pap in GetEntArray("pack_a_punch", "script_noteworthy"))
+    {
+        if(!isdefined(pap.target))
+            continue;
+        
+        ent = GetEnt(pap.target, "targetname");
+
+        if(!isdefined(ent))
+            continue;
+
+        a_v_paps[a_v_paps.size] = ent.origin;
+    }
+    
+    foreach(pap in GetEntArray("specialty_weapupgrade", "script_noteworthy"))
+    {
+        if(!isdefined(pap.target))
+            continue;
+        
+        ent = GetEnt(pap.target, "targetname");
+
+        if(!isdefined(ent))
+            continue;
+
+        a_v_paps[a_v_paps.size] = ent.origin;
+    }
+    return a_v_paps;
+}
+
+gm_find_perk_origins()
+{
+    a_v_perks = [];
+    foreach(perk in getentarray("zombie_vending", "targetname"))
+    {
+        array::add(a_v_perks, perk.origin, 0);
+    }
+    return a_v_perks;
+}
+
+gm_find_box_origins()
+{
+    a_v_boxes = [];
+    foreach(box in level.chests)
+    {
+        a_v_boxes[a_v_boxes.size] = isdefined(box.orig_origin) ? box.orig_origin : box.origin;
+    }
+    return a_v_boxes;
+}
+
+gm_find_gum_origins()
+{
+    a_v_gums = [];
+    foreach(trig in getentarray("bgb_machine_use", "targetname"))
+    {
+        a_v_gums[a_v_gums.size] = trig.origin;
+    }
+    return a_v_gums;
+}
+
+gm_find_door_origins()
+{
+    a_v_doors = [];
+    types = ["zombie_door", "zombie_airlock_buy", "zombie_debris"];
+    foreach(type in types)
+    {
+        zombie_doors = GetEntArray(type, "targetname");
+        foreach(door in zombie_doors)
+        {
+            a_v_doors[a_v_doors.size] = door.origin;
+        }
+    }
+    return a_v_doors;
+}
+
+gm_find_wallbuy_origins()
+{
+    a_v_weapons = [];
+    spawnable_weapon_spawns = struct::get_array("weapon_upgrade", "targetname");
+	spawnable_weapon_spawns = arraycombine(spawnable_weapon_spawns, struct::get_array("bowie_upgrade", "targetname"), 1, 0);
+	spawnable_weapon_spawns = arraycombine(spawnable_weapon_spawns, struct::get_array("sickle_upgrade", "targetname"), 1, 0);
+	spawnable_weapon_spawns = arraycombine(spawnable_weapon_spawns, struct::get_array("tazer_upgrade", "targetname"), 1, 0);
+	spawnable_weapon_spawns = arraycombine(spawnable_weapon_spawns, struct::get_array("buildable_wallbuy", "targetname"), 1, 0);
+	if(isdefined(level.use_autofill_wallbuy) && level.use_autofill_wallbuy)
+	{
+		spawnable_weapon_spawns = arraycombine(spawnable_weapon_spawns, level.active_autofill_wallbuys, 1, 0);
+	}
+    foreach(weapon in spawnable_weapon_spawns)
+    {
+        a_v_weapons[a_v_weapons.size] = weapon.origin;
+    }
+    return a_v_weapons;
+}
+
+gm_search_pois(a_v_spawns = [], target_player)
+{
+    if(a_v_spawns.size < 1) return undefined;
+    remaining_points = a_v_spawns;
+    solution_set = [];
+    foreach(player in array::randomize(getplayers()))
+    {
+        if(player == target_player) continue;
+        if(player.sessionstate != "playing") continue;
+        solution_set[solution_set.size] = player.origin;
+    }
+    if(solution_set.size < 1)
+    {
+        solution_set[0] = remaining_points[randomint(remaining_points.size)];
+    }
+    a_n_distances = [];
+    foreach(spawn in remaining_points)
+    {
+        a_n_distances[a_n_distances.size] = int(distance2d(solution_set[0], spawn));
+    }
+    foreach(k_point, v_point in remaining_points)
+    {
+        foreach(k_ans, v_ans in solution_set)
+        {
+            a_n_distances[k_point] = int(min(a_n_distances[k_point], distance2d(v_point, v_ans)));
+        }
+    }
+    i_max = 0;
+    v_max = 0;
+    foreach(k, v in a_n_distances)
+    {
+        if(v > v_max)
+        {
+            v_max = v;
+            i_max = k;
+        }
+    }
+    return remaining_points[i_max];
 }

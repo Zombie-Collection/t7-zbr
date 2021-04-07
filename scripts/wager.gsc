@@ -160,7 +160,7 @@ wager_scene_shotgun_fire(owner)
     self endon("stop_shooting");
     while(true)
     {
-        magicbullet(self.weapon, self gettagorigin("tag_flash"), self gettagorigin("tag_flash") + vectorscale(anglestoforward(self.angles), 1000), owner);
+        magicbullet(self.weapon, self gettagorigin("tag_flash"), self gettagorigin("tag_flash") + vectorscale(anglestoforward(self.angles), 1000), self);
         wait 0.15;
     }
 }

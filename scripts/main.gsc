@@ -11,6 +11,12 @@ on_player_connect()
     self.gm_id = level.gm_id;
     level.gm_id++;
     self.noHitMarkers = false;
+
+    if(level.players.size > 4)
+    {
+        level.b_use_poi_spawn_system = true;
+    }
+
     if(self ishost())
     {
         initgamemode();

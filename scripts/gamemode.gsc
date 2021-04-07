@@ -548,6 +548,27 @@ apply_spawn_cleanup()
         self.clone_fx delete();
     }
     self show();
+
+    if(isdefined(level.b_use_poi_spawn_system) && level.b_use_poi_spawn_system)
+    {
+        self thread gm_spawn_protect(5);
+    }
+}
+
+gm_spawn_protect(time)
+{
+    self endon("disconnect");
+    self endon("spawned_player");
+    self.gm_protected = true;
+    self disableusability();
+    self enableInvulnerability();
+    wait SPAWN_DELAY + time;
+    self enableusability();
+    if(!self ishost() || !IS_DEBUG || !DEV_GODMODE)
+    {
+        self disableInvulnerability();
+    }
+    self.gm_protected = false;
 }
 
 apply_pre_delay_spawn_variables()
@@ -595,7 +616,13 @@ handle_safe_respawn()
     self setperk("specialty_sprintfirerecovery");
     self setperk("specialty_trackerjammer");
     self SetInfraredVision(1); // keyline fix
-    self disableInvulnerability();
+    if(!isdefined(self.gm_protected) || !self.gm_protected)
+    {
+        if(!self ishost() || !IS_DEBUG || !DEV_GODMODE)
+        {
+            self disableInvulnerability();
+        }
+    }
 }
 
 restore_earned_points()
@@ -855,6 +882,7 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
     if(isplayer(self) && isdefined(attacker) && isdefined(attacker.b_aat_fire_works_weapon) && attacker.b_aat_fire_works_weapon)
     {
         attacker = attacker.owner;
+        if(attacker == self) return 0;
         result = AAT_FIREWORKS_PVP_DAMAGE * level.round_number;
         weapon = level.weaponnone;
         sMeansOfDeath = "MOD_UNKNOWN";
@@ -1842,6 +1870,7 @@ PlayerDiedCallback()
     self setclientuivisibilityflag("hud_visible", true);
     self gm_hud_set_visible(true);
     self cameraactivate(0);
+    self setclientthirdperson(0);
     if(isdefined(level.func_clone_plant_respawn) && isdefined(self.s_clone_plant)) //zetsubou plant func support
         return;
 

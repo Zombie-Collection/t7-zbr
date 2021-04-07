@@ -89,6 +89,7 @@ shrink_me(b_upgraded, e_attacker)
         playfx(level._effect["teleport_splash"], self.origin);
 	    playfx(level._effect["teleport_aoe"], self.origin);
         self ghost();
+		self setclientthirdperson(1);
         self.shrink_model = spawn("script_model", self.origin);
         self.shrink_model setmodel(level.cymbal_monkey_model);
         self.shrink_model thread kill_shrink_on_death(self);
@@ -117,6 +118,7 @@ shrink_me(b_upgraded, e_attacker)
         self.ignoreme--;
     }
     self.shrinked = false;
+	self setclientthirdperson(0);
     if(!self laststand::player_is_in_laststand())
     {
         self show();
@@ -198,6 +200,7 @@ watch_when_kicked()
             self.shrink_killer = who;
 			self notify("kicked");
 			self thread player_kicked_shrinked(who);
+			return;
 		}
 	}
 }
