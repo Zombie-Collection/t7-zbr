@@ -1,0 +1,146 @@
+monitor_thundergun_pvp()
+{
+    if(!isdefined(GetWeapon("thundergun")) || !isdefined(GetWeapon("thundergun").name)) return;
+
+    self endon("disconnect");
+    self notify("monitor_thundergun_pvp");
+    self endon("monitor_thundergun_pvp");
+
+    if(IS_DEBUG && DEBUG_THUNDERGUN && self ishost())
+    {
+        wait SPAWN_DELAY;
+        self takeAllWeapons();
+        self giveWeapon(GetWeapon("thundergun"));
+        self switchToWeapon(GetWeapon("thundergun"));
+        self giveMaxAmmo(GetWeapon("thundergun"));
+    }
+
+    level.limited_weapons[GetWeapon("thundergun")] = 4;
+
+	for(;;)
+	{
+		self waittill("weapon_fired");
+		currentWeapon = self GetCurrentWeapon();
+		if(currentWeapon == GetWeapon("thundergun") || currentWeapon == GetWeapon("thundergun_upgraded"))
+		{
+			self thread thundergun_fired(currentWeapon);
+		}
+	}
+}
+
+thundergun_fired(weapon)
+{
+	players = self thundergun_get_enemies_in_range();
+	foreach(player in players)
+    {
+        player thread ThundergunKnockback(self, weapon);
+    }
+}
+
+thundergun_get_enemies_in_range()
+{
+	view_pos = self GetWeaponMuzzlePoint();
+	zombies = Array::get_all_closest(view_pos, level.players, undefined, undefined, level.zombie_vars["thundergun_knockdown_range"]);
+	if(!isdefined(zombies))
+	{
+		return [];
+	}
+
+    to_knock = [];
+
+	knockdown_range_squared = level.zombie_vars["thundergun_knockdown_range"] * level.zombie_vars["thundergun_knockdown_range"];
+	gib_range_squared = level.zombie_vars["thundergun_gib_range"] * level.zombie_vars["thundergun_gib_range"];
+	fling_range_squared = level.zombie_vars["thundergun_fling_range"] * level.zombie_vars["thundergun_fling_range"];
+	cylinder_radius_squared = level.zombie_vars["thundergun_cylinder_radius"] * level.zombie_vars["thundergun_cylinder_radius"];
+	forward_view_angles = self GetWeaponForwardDir();
+	end_pos = view_pos + VectorScale(forward_view_angles, level.zombie_vars["thundergun_knockdown_range"]);
+	for(i = 0; i < zombies.size; i++)
+	{
+		if(!isdefined(zombies[i]) || !isalive(zombies[i]) || zombies[i] == self || zombies[i].sessionstate != "playing")
+		{
+			continue;
+		}
+		test_origin = zombies[i] GetCentroid();
+		test_range_squared = DistanceSquared(view_pos, test_origin);
+		if(test_range_squared > knockdown_range_squared)
+		{
+			return to_knock;
+		}
+		normal = VectorNormalize(test_origin - view_pos);
+		dot = VectorDot(forward_view_angles, normal);
+		if(0 > dot)
+		{
+			continue;
+		}
+		radial_origin = PointOnSegmentNearestToPoint(view_pos, end_pos, test_origin);
+		if(DistanceSquared(test_origin, radial_origin) > cylinder_radius_squared)
+		{
+			continue;
+		}
+		if(0 == (zombies[i] damageConeTrace(view_pos, self)))
+		{
+			continue;
+		}
+		to_knock[to_knock.size] = zombies[i];
+	}
+
+    return to_knock;
+}
+
+ThundergunKnockback(attacker, weapon)
+{
+    alpha = min(1, distance(attacker.origin, self.origin) / level.zombie_vars["thundergun_knockdown_range"]);
+    velocity = LerpFloat(TGUN_LAUNCH_MIN_VELOCITY, TGUN_LAUNCH_MAX_VELOCITY, 1 - alpha);
+    angles = VectorNormalize(anglesToForward(attacker getPlayerAngles()));
+
+    final_velocity = angles * velocity;
+    final_velocity_clamped = (final_velocity[0], final_velocity[1], min(max(final_velocity[2], 200), -200));
+
+    self setOrigin(self getOrigin() + (0,0,10));
+    self setVelocity(final_velocity_clamped);
+    self.launch_magnitude_extra = 200;
+    self.v_launch_direction_extra = vectorNormalize(final_velocity_clamped);
+    self dodamage(TGUN_BASE_DMG_PER_ROUND * level.round_number, self.origin, attacker, undefined, "none", "MOD_PISTOL_BULLET", 0, level.weaponnone);
+    self thread TG_ImpactDamage(attacker);
+}
+
+TG_ImpactDamage(attacker)
+{
+    self endon("bled_out");
+    self endon("death");
+    self notify("TG_ImpactDamage");
+    self endon("TG_ImpactDamage");
+    self endon("disconnect");
+    level endon("end_game");
+
+    wait .025;
+    waittillframeend;
+    sv = self getVelocity();
+    svd = Distance2D((0,0,0), sv);
+
+    while(1)
+    {
+        wait 0.1;
+        nv = self getVelocity();
+        nvd = Distance2D((0,0,0), nv);
+
+        if(nvd <= 100 && self isOnGround())
+            return;
+            
+        if(nvd < svd)
+        {
+            dval = abs(nvd - svd);
+
+            if(self.origin[2] <= -20000)
+                self doDamage(self.maxhealth + 1, self.origin, attacker);
+
+            if(dval >= 200)
+            {
+                self doDamage(int(dval / 100 * TGUN_IMPACT_DMG_PER_HUNDRED_U_S), self.origin, attacker, undefined, "none", "MOD_UNKNOWN", 0, level.weaponnone);
+            }
+        }
+        
+        sv = nv;
+        svd = nvd;
+    }
+}
