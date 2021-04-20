@@ -1,6 +1,6 @@
 register_bow_callbacks()
 {
-	if(level.script != "zm_castle") return;
+	if(!isdefined(level.var_e93874ed)) return;
     self.var_a320d911 = 0;
 	self.var_98056717 = 0;
     self.var_ca25d40c = 0;

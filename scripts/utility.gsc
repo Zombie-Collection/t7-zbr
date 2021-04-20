@@ -97,7 +97,7 @@ ZoneUpdateHUD()
     self endon("ZoneUpdateHUD");
     level endon("end_game");
 
-    if(!isdefined(self._zone_debug_spawned))
+    if(DEV_ZONE_SPAWNERS && !isdefined(self._zone_debug_spawned))
     {
         self._zone_debug_spawned = true;
         spawners = struct::get_array("player_respawn_point", "targetname");
@@ -113,19 +113,32 @@ ZoneUpdateHUD()
         }
 
     }
-    
 
-    while(1)
+    while(true)
     {   
         wait 1;
         if(self.sessionstate != "playing")
+        {
             continue;
-        
+        }
         zone = self zm_zonemgr::get_player_zone();
-        self.zone_hud SetText(zone);
-
+        z_text = level.script + ": " + zone;
+        if(isinarray(level.gm_blacklisted, zone))
+        {
+            z_text += " (^1BLACKLISTED^7)";
+        }
+        self.zone_hud SetText(z_text);
         if(self useButtonPressed())
-            self iPrintLnBold(self getOrigin() + "|" + self getPlayerAngles());
+        {
+            if(self adsButtonPressed())
+            {
+                // stuff
+            }
+            else
+            {
+                self iPrintLnBold(self getOrigin() + "|" + self getPlayerAngles());
+            }
+        }
     }
 }
 
@@ -441,4 +454,78 @@ dev_util_thread()
 {
     if(isdefined(level.elo_debug_thread))
         self thread [[level.elo_debug_thread]]();
+
+    if(DEBUG_BOT_TELEPORT)
+    {
+        self thread dev_bot_teleport();
+    }
+    else if(DEBUG_BOT_KICK)
+    {
+        self thread dev_bot_kick();
+    }
+}
+
+dev_bot_teleport()
+{
+    self endon("spawned_player");
+    self endon("bled_out");
+    self endon("disconnect");
+    while(true)
+    {
+        if(self adsButtonPressed() && self meleeButtonPressed())
+        {
+            foreach(player in array::randomize(getplayers()))
+            {
+                if(player == self) continue;
+                if(player.sessionstate != "playing") continue;
+                if(!player util::is_bot()) continue;
+                player setOrigin(self getorigin());
+                player freezeControls(true);
+                break;
+            }
+            while(self adsButtonPressed() || self meleeButtonPressed())
+            {
+                wait 0.25;
+            }
+        }
+        wait 0.25;
+    }
+}
+
+dev_bot_kick()
+{
+    self endon("spawned_player");
+    self endon("bled_out");
+    self endon("disconnect");
+    while(true)
+    {
+        if(self adsButtonPressed() && self meleeButtonPressed())
+        {
+            foreach(player in array::randomize(getplayers()))
+            {
+                if(player == self) continue;
+                if(player.sessionstate != "playing") continue;
+                if(!player util::is_bot()) continue;
+                kick(player getEntityNumber());
+                break;
+            }
+            while(self adsButtonPressed() || self meleeButtonPressed())
+            {
+                wait 0.25;
+            }
+        }
+        wait 0.25;
+    }
+}
+
+dev_actor(origin, angles)
+{
+    if(!IS_DEBUG) 
+    {
+        return undefined;
+    }
+    mdl = spawn("script_model", origin);
+    mdl.angles = angles;
+    mdl setModel("defaultactor");
+    return mdl;
 }

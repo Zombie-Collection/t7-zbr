@@ -8,7 +8,7 @@
 
 monitor_mirg2000()
 {
-    if(level.script != "zm_island") return;
+    if(!isdefined(level.var_5e75629a)) return;
     self endon("disconnect");
     self endon("bled_out");
     self endon("spawned_player");

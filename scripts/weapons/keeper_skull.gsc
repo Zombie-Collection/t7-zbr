@@ -1,6 +1,6 @@
 monitor_keeper_skull()
 {
-    if(level.script != "zm_island") return;
+    if(!isdefined(level.var_c003f5b)) return;
     self thread watch_skull_attack(); // attack
     self thread watch_skull_mesmerize(); // mesmerize
 }

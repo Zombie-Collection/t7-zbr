@@ -13,7 +13,17 @@ initgamemode()
     level thread octobomb_watcher();
     level thread PointAddedDispatcher();
 
-    foreach(box in level.chests) box thread one_box_hit_monitor();
+    foreach(box in level.chests) 
+    {
+        box thread one_box_hit_monitor();
+        box.unitrigger_stub.prompt_and_visibility_func = serious::stealable_box_vis_func;
+    }
+
+    vending_weapon_upgrade_trigger = zm_pap_util::get_triggers();
+	if(vending_weapon_upgrade_trigger.size >= 1)
+	{
+		array::thread_all(vending_weapon_upgrade_trigger, serious::stealable_vending_weapon_upgrade);
+	}
 
     initdev();
 
@@ -24,16 +34,20 @@ initgamemode()
 initgamemodethreaded()
 {
     level flag::wait_till("begin_spawning");
+    level.limited_weapons = []; // clear weapon limits so all players can obtain what they want
     level.zombie_init_done = ::Event_ZombieInitDone;
     level thread zm_island_fix();
+    level thread zm_round_failsafe();
 
     zm_moon_fixes();
     enable_power();
     apply_perk_changes();
     apply_door_prices();
+    setup_weapons();
 
     rand = randomIntRange(0, 2);
     high = level.script == "zm_zod" ? 3 : 1;
+    if(level.script == "zm_castle") high = 0;
     apply_lighting(int(rand * high));
 
     // start the first game mode round
@@ -42,6 +56,23 @@ initgamemodethreaded()
     world.var_48b0db18 = level.round_number ^ 115;
     level.skip_alive_at_round_end_xp = true;
     thread zm_bgb_round_robbin::function_8824774d(level.round_number + 1);
+}
+
+setup_weapons()
+{
+    if(isdefined(level.weaponriotshield) && level.weaponriotshield.name == "dragonshield")
+    {
+        level._riotshield_melee_power = level.riotshield_melee_power;
+        level.riotshield_melee_power = ::dragon_shield_melee;
+    }
+    if(isdefined(getweapon("hero_gravityspikes_melee")) && isdefined(level._hero_weapons[getweapon("hero_gravityspikes_melee")].wield_fn))
+    {
+        level.old_gs_wield_fn = level._hero_weapons[getweapon("hero_gravityspikes_melee")].wield_fn;
+        level.old_gs_unwield_fn = level._hero_weapons[getweapon("hero_gravityspikes_melee")].unwield_fn;
+        level._hero_weapons[getweapon("hero_gravityspikes_melee")].wield_fn = ::wield_gravityspikes;
+        level._hero_weapons[getweapon("hero_gravityspikes_melee")].unwield_fn = ::unwield_gravityspikes;
+    }
+    custom_weapon_init();
 }
 
 apply_lighting(setting = 0)
@@ -65,10 +96,11 @@ setup_environment()
     level.raps_rounds_enabled = false;  // fix SOE crash
     level.var_1821d194 = true; // zm_island anti-spider fix
     level.drawfriend = false;
+    level.custom_firesale_box_leave = false;
     #endregion
 
     #region Scalar
-    level.perk_purchase_limit = 9;
+    level.perk_purchase_limit = 99;
     level._random_zombie_perk_cost = 1500;
     level.chest_moves = 1; // allows firesales to be dropped by the game
 
@@ -186,7 +218,9 @@ apply_bgb_changes()
         machine thread OneGobbleOnly();
         if(!isdefined(level.old_bgb_stub_func))
             level.old_bgb_stub_func = machine.unitrigger_stub.prompt_and_visibility_func;
+        machine.var_4d6e7e5e = true;
         machine.unitrigger_stub.prompt_and_visibility_func = serious::bgb_visibility_override;
+        machine thread bgb_stealable_trigger_check();
     }
 
     setDvar("scr_firstGumFree", false);
@@ -231,6 +265,12 @@ apply_perk_changes()
     }
 
     level._custom_perks["specialty_additionalprimaryweapon"].player_thread_take = serious::mulekick_take;
+
+    foreach(machine in level.perk_random_machines)
+    {
+        machine.unitrigger_stub.prompt_and_visibility_func = serious::stealable_perk_random_visibility_func;
+        machine thread rng_perk_machine_think();
+    }
 }
 
 apply_trap_changes()
@@ -417,6 +457,20 @@ hostdev()
         }
     }
 
+    if(DEBUG_TESLA_GUN && isdefined(level.weaponzmteslagun))
+    {
+        self takeAllWeapons();
+        if(DEBUG_TESLA_GUN > 1)
+        {
+            self zm_weapons::weapon_give(level.weaponzmteslagunupgraded, 0, 0, 1);
+        }
+        else
+        {
+            self zm_weapons::weapon_give(level.weaponzmteslagun, 0, 0, 1);
+        }
+        
+    }
+
     self thread dev_util_thread();
 }
 
@@ -510,6 +564,7 @@ GMSpawned()
     self apply_player_spectator_permissions();
     self remove_blacklisted_bgbs();
     self player_bgb_buys_1();
+    self gm_hud_set_visible(true);
     self hostdev();
 
     self thread protect_from_zombies(15);
@@ -802,6 +857,14 @@ true_one_arg(player)
 
 check_firesale_valid_loc(arg0)
 {
+    // corrects an issue where a box that is the normal box will not be shown if hidden before a firesale
+    if(level.chests[level.chest_index] == self)
+    {
+        if(isdefined(self.hidden) && self.hidden)
+        {
+            self thread zm_magicbox::show_chest();
+        }
+    }
     self.was_temp = undefined;
     level.disable_firesale_drop = undefined; // fixes a state where firesales can never drop
     return true;
@@ -853,7 +916,6 @@ weapon_is_ww(weapon)
 
 weapon_is_ds(weapon)
 {
-    if(level.script != "zm_stalingrad") return false;
     return weapon.rootweapon.name == "launcher_dragon_fire_upgraded" || weapon.rootweapon.name == "launcher_dragon_fire";
 }
 
@@ -978,7 +1040,7 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
             if(EXPLOSIVE_KNOCKBACK_SCALAR)
             {
                 target_velocity = VectorScale(vectornormalize(vDir) + (0,0,1), EXPLOSIVE_KNOCKBACK_SCALAR);
-                if(level.script == "zm_moon" && isdefined(self.in_low_gravity) && self.in_low_gravity)
+                if(isdefined(self.in_low_gravity) && self.in_low_gravity)
                 {
                     target_velocity = (target_velocity[0], target_velocity[1], int(min(target_velocity[2], 100)));
                 }
@@ -1257,7 +1319,7 @@ is_upgraded_tomb_staff(weapon)
 }
 
 
-GM_AdjustWeaponDamage(weapon, result, sMeansOfDeath = "MOD_NONE", attacker = undefined)
+GM_AdjustWeaponDamage(weapon, result, sMeansOfDeath = "MOD_NONE", attacker)
 {
     if(!isdefined(weapon) || !isdefined(weapon.rootweapon))
         return result;
@@ -1374,10 +1436,18 @@ GM_AdjustWeaponDamage(weapon, result, sMeansOfDeath = "MOD_NONE", attacker = und
             return result * 12;
 
         case "tesla_gun":
-            return 5000 + (500 * level.round_number);
+            if(sMeansOfDeath == "MOD_PROJECTILE")
+            {
+                return 5000 + (500 * level.round_number);
+            }
+            return 2500 + (250 * level.round_number);
 
         case "tesla_gun_upgraded":
-            return 10000 + (1000 * level.round_number);
+            if(sMeansOfDeath == "MOD_PROJECTILE")
+            {
+                return 10000 + (1000 * level.round_number);
+            }
+            return 5000 + (500 * level.round_number);
 
         case "sticky_grenade_widows_wine":
             if(IS_DEBUG && DEBUG_WW_DAMAGE) return 1;
@@ -1481,7 +1551,7 @@ GM_AdjustWeaponDamage(weapon, result, sMeansOfDeath = "MOD_NONE", attacker = und
         default:
 
             if(!is_tomb_staff(weapon))
-                return result;
+                return gm_adjust_custom_weapon(weapon, result, sMeansOfDeath, attacker);
             
             if(!is_upgraded_tomb_staff(weapon))
                 return level.round_number * 1000;
@@ -1708,6 +1778,11 @@ Event_RoundNext()
         level.gm_lastround = level.round_number;
     }
 
+    if(level.perk_purchase_limit < 99)
+    {
+        level.perk_purchase_limit = 99; // fixes the custom maps that limit after spawning 
+    }
+
     level.skip_alive_at_round_end_xp = false;
     level.zombie_vars[ "zombie_between_round_time" ] = (float(GM_ROUND_DELAY_FULL_RND - min(GM_ROUND_DELAY_FULL_RND, level.round_number)) / GM_ROUND_DELAY_FULL_RND * GM_BETWEEN_ROUND_DELAY_START) + 0.05;
 
@@ -1729,7 +1804,7 @@ Event_RoundNext()
 	{
 		if(!level.var_5081bd63[i].var_4d6e7e5e) // if not already showing
 		{
-			level.var_5081bd63[i].var_7ec446a0 = 1;
+            level.var_5081bd63[i].var_4d6e7e5e = true;
 			level.var_5081bd63[i] thread bgb_machine::func_13565590(); // show it
 		}
 	}
@@ -1847,28 +1922,12 @@ player_bgb_buys_1()
     return false;
 }
 
-//credits: itsfebiven
-bgb_visibility_override(player)
-{
-    if(isdefined(player.wager_bgb_pack)) 
-    {
-        return false;
-    }
-
-    if(level.script != "zm_zod")
-        self.stub.trigger_target.base_cost = level.var_f02c5598;
-    
-    result = self [[ level.old_bgb_stub_func ]](player);
-    if(level.script != "zm_zod") self setHintString(&"ZOMBIE_BGB_MACHINE_AVAILABLE", bgb_machine::function_6c7a96b4(player, self.stub.trigger_target.base_cost));
-    return result;
-}
-
 PlayerDiedCallback()
 {
     self.ignoreme++;
     self.origin = self.v_gm_cached_position;
     self setclientuivisibilityflag("hud_visible", true);
-    self gm_hud_set_visible(true);
+    self gm_hud_set_visible(self ishost()); // we shouldn't see other player's bars along with our own. Host will never spectate, so theirs will need to be shown
     self cameraactivate(0);
     self setclientthirdperson(0);
     if(isdefined(level.func_clone_plant_respawn) && isdefined(self.s_clone_plant)) //zetsubou plant func support
@@ -2007,25 +2066,31 @@ GiveCatalystLoadout()
         
         switch(true)
         {
-            case zm_utility::is_melee_weapon(weapon):
             case zm_utility::is_hero_weapon(weapon):
+                if(weapon.rootweapon.name == "skull_gun")
+                {
+                    self flag::set("has_skull");
+                }
+                self zm_weapons::weapon_give(weapon, 0, 0, 1, 0);
+                self zm_utility::set_player_hero_weapon(weapon);
+            break;
+            case zm_utility::is_melee_weapon(weapon):
             case zm_utility::is_lethal_grenade(weapon):
             case zm_utility::is_tactical_grenade(weapon):
             case zm_utility::is_placeable_mine(weapon):
             case zm_utility::is_offhand_weapon(weapon):
-                if(weapon.rootweapon.name == "skull_gun") self flag::set("has_skull");
                 self zm_weapons::weapon_give(weapon, 0, 0, 1, 0);
             break;
 
             default:
-                if(num_given >= zm_utility::get_player_weapon_limit(self))
-                    break;
-                
-                acvi = self GetBuildKitAttachmentCosmeticVariantIndexes(weapon, zm_weapons::is_weapon_upgraded(weapon));
-                self GiveWeapon(weapon, options, acvi);
-                self switchtoweaponimmediate(weapon);
-                GiveAAT(self, item.aat, false, weapon);
-                num_given++;
+                if(num_given < zm_utility::get_player_weapon_limit(self))
+                {
+                    acvi = self GetBuildKitAttachmentCosmeticVariantIndexes(weapon, zm_weapons::is_weapon_upgraded(weapon));
+                    self GiveWeapon(weapon, options, acvi);
+                    self switchtoweaponimmediate(weapon);
+                    GiveAAT(self, item.aat, false, weapon);
+                    num_given++;
+                }
             break;
         }
     }
@@ -2463,6 +2528,7 @@ GM_CreateHUD()
     if(!isdefined(self._bars[self GetEntityNumber()]))
     {
         self._bars[self GetEntityNumber()] = self CreateProgressBar("LEFT", "LEFT", 15, BASE_OFFSET + 0, 50, 8, self GM_GetPlayerColor(), 0);
+        self._bars[self GetEntityNumber()].player = self;
         self._bars[self GetEntityNumber()].box = self CreateCheckBox("LEFT", "LEFT", 67, BASE_OFFSET + 0, 8, self GM_GetPlayerColor(true), 0);
     }
     
@@ -2475,6 +2541,7 @@ GM_CreateHUD()
         if(!isdefined(self._bars[player GetEntityNumber()]))
         {
             self._bars[player GetEntityNumber()] = self CreateProgressBar("LEFT", "LEFT", 15, BASE_OFFSET + i, 50, 8, player GM_GetPlayerColor(), 0);
+            self._bars[player GetEntityNumber()].player = player;
             self._bars[player GetEntityNumber()].box = self CreateCheckBox("LEFT", "LEFT", 67, BASE_OFFSET + i, 8, player GM_GetPlayerColor(true), 0);
         }
         i -= 10;
@@ -2493,7 +2560,7 @@ gm_hud_set_visible(visible = true)
         return;
     
     self.gm_hud_hide = !visible;
-    foreach(player in level.players) self UpdateGMProgress(player);
+    foreach(bar in self._bars) self UpdateGMProgress(bar);
 }
 
 GM_GetPlayerColor(nored = false)
@@ -2520,45 +2587,83 @@ GM_GetPlayerColor(nored = false)
     }
 }
 
-UpdateGMProgress(player, dead = false)
+UpdateGMProgress(player_or_bar, dead = false)
 {
-    if(!isdefined(player) || self util::is_bot())
-        return;
-    
-    player endon("disconnect");
     self endon("disconnect");
 
+    if(self util::is_bot())
+    {
+        return;
+    }
+
+    if(!isdefined(player_or_bar))
+    {
+        return;
+    }
+
     if(!isdefined(self._bars))
+    {
         self._bars = [];
-    
-    bar = self._bars[player GetEntityNumber()];
+    }
+
+    if(isplayer(player_or_bar))
+    {
+        player = player_or_bar;
+        bar = self._bars[player GetEntityNumber()];
+    }
+    else
+    {
+        bar = player_or_bar;
+        player = bar.player;
+    }
 
     if(!isdefined(bar))
+    {
         return;
+    }
 
-    if(!isdefined(player.gm_objective_state))
-        player.gm_objective_state = false;
+    score = 0;
+    ptw = WIN_NUMPOINTS;
+    alive = false;
+    objective_state = undefined;
+    if(isdefined(player))
+    {
+        player endon("disconnect");
+        if(!isdefined(player.gm_objective_state))
+        {
+            player.gm_objective_state = false;
+        }
+        if(!isdefined(player.score))
+        {
+            player.score = 0;
+        }
+        bar.dimmed = player.gm_objective_state;
+        bar.primarycolor = player GM_GetPlayerColor(true);
+        bar.secondarycolor = player GM_GetPlayerColor();
+        score = player.score;
+        ptw = player Get_PointsToWin();
+        alive = player.sessionstate == "playing";
+        objective_state = player.gm_objective_state;
+    }
 
-    if(!isdefined(player.score))
-        player.score = 0;
-    
-    bar.dimmed = player.gm_objective_state;
-    bar.primarycolor = player GM_GetPlayerColor(true);
-    bar.secondarycolor = player GM_GetPlayerColor();
-    SetProgressbarPercent(bar, float(player.score) / player Get_PointsToWin());
+    SetProgressbarPercent(bar, float(score) / ptw);
 
     if(isdefined(bar.box))
-        SetChecked(bar.box, (player.sessionstate == "playing") && !dead);
+    {
+        SetChecked(bar.box, alive && !dead);
+    }
 
-    if(!isdefined(player.gm_objective_state) || !player.gm_objective_state)
+    if(!isdefined(objective_state) || !objective_state)
     {
         SetProgressbarSecondaryPercent(bar, 0);
         return;
     }
 
+    // player will be defined here because objective_state is undefined otherwise, which returns in the previous check
     if(!isdefined(player.gm_objective_timesurvived))
+    {
         player.gm_objective_timesurvived = 0;
-
+    }
     SetProgressbarSecondaryPercent(bar, player.gm_objective_timesurvived / OBJECTIVE_WIN_TIME);
 }
 
@@ -2803,5 +2908,25 @@ watch_falling_forever()
         {
             self doDamage(int(self.maxhealth + 1), self.origin);
         }
+    }
+}
+
+zm_round_failsafe()
+{
+    level endon("game_ended");
+    while(true)
+    {
+        i = 0;
+        while(getaiteamarray(level.zombie_team).size < 5 && i < ROUND_NO_AI_TIMEOUT)
+        {
+            i++;
+            wait 1;
+        }
+        if(ROUND_NO_AI_TIMEOUT <= i)
+        {
+            goto_round(level.round_number + 1);
+            wait 25;
+        }
+        wait 5;
     }
 }

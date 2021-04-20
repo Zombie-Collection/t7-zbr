@@ -1,6 +1,6 @@
 monitor_staffs_tomb()
 {
-	if(level.script != "zm_tomb") return;
+	if(!isdefined(level.var_32bc7eba)) return;
     self thread monitor_fire_tomb();
     self thread monitor_lightning_tomb();
     self thread watch_staff_water_impact();

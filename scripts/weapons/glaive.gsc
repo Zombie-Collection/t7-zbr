@@ -38,7 +38,7 @@ AdjustPlayerSword(player, type, noprint=false)
 
 glaive_pvp_monitor()
 {
-	if(level.script != "zm_zod") return;
+	if(!isdefined(level.glaive_excalibur_aoe_range)) return;
     self endon("bled_out");
     self endon("spawned_player");
     self endon("disconnect");

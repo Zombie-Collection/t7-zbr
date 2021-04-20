@@ -1,6 +1,6 @@
 wait_for_microwavegun_fired()
 {
-	if(level.script != "zm_moon") return;
+	if(!isdefined(level.var_12fcda98)) return;
     self endon("spawned_player");
     self endon("bled_out");
     self endon("disconnect");

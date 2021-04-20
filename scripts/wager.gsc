@@ -92,16 +92,40 @@ spawn_wager_totem(location, angles, owner)
     wager_totem endon("death");
     owner.wager_totem = wager_totem;
     wager_totem thread wager_totem_cleanup(owner);
-    wager_totem.wager_level = WAGER_MIN_LEVEL;
+    if(isdefined(owner.wager_tier))
+    {
+        wager_totem.wager_level = owner.wager_tier + 1;
+    }
+    else
+    {
+        wager_totem.wager_level = WAGER_MIN_LEVEL;
+    }
     stub = wager_totem zm_unitrigger::create_unitrigger("", 128, serious::wager_visibility_check, serious::wager_trigger_think, "unitrigger_radius_use");
-    stub.trigger_per_player = true;
+    zm_unitrigger::unitrigger_force_per_player_triggers(stub, true);
     stub.totem = wager_totem;
     wager_totem.trig = stub;
+    owner thread watch_totem_respawn(wager_totem);
     while(level.round_number <= WAGER_COMMIT_ROUND)
     {
         level waittill("wager_check");
     }
     wager_totem thread wager_totem_exit();
+}
+
+watch_totem_respawn(wager_totem)
+{
+    self endon("disconnect");
+    wager_totem endon("death");
+    self waittill("bled_out");
+    level thread kill_wager_totem(self);
+}
+
+kill_wager_totem(owner)
+{
+    if(!isdefined(owner.wager_totem)) return;
+    wager_totem = owner.wager_totem;
+    wager_totem thread wager_totem_exit();
+    owner.wager_totem = undefined;
 }
 
 create_wager_totem(location, angles, owner)
@@ -222,7 +246,11 @@ wager_totem_exit()
 wager_visibility_check(player)
 {
     if(!isdefined(self.stub.totem.owner)) return false;
-    if(self.stub.totem.owner != player) return false;
+    b_result = true;
+    if(self.stub.totem.owner != player)
+    {
+        return false;
+    }
     if(player.sessionstate != "playing")
     {
         return false;
@@ -236,7 +264,7 @@ wager_visibility_check(player)
         return false;
     }
     self sethintstring(make_wager_text(self.stub.totem.wager_level));
-    return true;
+    return b_result;
 }
 
 wager_trigger_think()

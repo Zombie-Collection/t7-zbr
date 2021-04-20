@@ -2,7 +2,7 @@ grenade_planted_override(grenade, model)
 {
     if(!isdefined(grenade.weapon)) return;
 
-    if(level.script == "zm_tomb" && grenade.weapon == level.var_25ef5fab)
+    if(isdefined(level.var_25ef5fab) && grenade.weapon == level.var_25ef5fab)
     {
         return self zm_tomb_grenade_planted(grenade, model);
     }

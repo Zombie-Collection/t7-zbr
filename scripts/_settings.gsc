@@ -390,6 +390,14 @@
 // default value: 5
 #define WAGER_COMMIT_ROUND = 5;
 
+// Number of seconds that the round may have fewer than 5 AI active before all ai will die and the round will advance.
+// default value: 60
+#define ROUND_NO_AI_TIMEOUT = 60;
+
+// Damage per second of the genesis turret, scaled by the round number
+// default value: 5000
+#define GENESIS_TURRET_DPS = 5000;
+
 #endregion
 
 ////////////////////////////////
@@ -411,7 +419,7 @@
 
 // When true, sets the host player to become invulnerable
 // default value: false
-#define DEV_GODMODE = true;
+#define DEV_GODMODE = false;
 
 // When true, gives the host player 25000 starting points
 // default value: false
@@ -419,7 +427,7 @@
 
 // When true, gives all players 25000 starting points
 // default value: false
-#define DEV_POINTS_ALL = false;
+#define DEV_POINTS_ALL = true;
 
 // When true, spawns in 3 test clients. NOTE: on any map with spiders, this option will cause a fatal crash within 3 rounds.
 // default value: false
@@ -427,19 +435,23 @@
 
 // When true, dev bots are ignored by zombies and take no damage from them
 // default value: false
-#define DEV_BOTS_IGNORE_ZM_DMG = false;
+#define DEV_BOTS_IGNORE_ZM_DMG = true;
 
 // When true, enables development hud features
 // default value: false
-#define DEV_HUD = false;
+#define DEV_HUD = true;
 
 // When true, creates a dev hud for the current zone
 // default value: false
-#define DEBUG_ZONE = false;
+#define DEBUG_ZONE = true;
+
+// When true, spawns a model at each spawn location in the map
+// default value: false
+#define DEV_ZONE_SPAWNERS = true;
 
 // When true, allows the host to fly with the grenade button and sprint
 // default value: false
-#define DEV_NOCLIP = false;
+#define DEV_NOCLIP = true;
 
 // When true, allows the host player to see enemy players through walls
 // default value: false
@@ -633,6 +645,42 @@
 // default value: false
 #define DEV_NO_WAGERS = false;
 
+// When true, forces host to spawn with a tesla gun
+// default value: false
+#define DEBUG_TESLA_GUN = false;
+
+// When true, the host can hold ads and melee to teleport a random bot to them.
+// default value: false
+#define DEBUG_BOT_TELEPORT = false;
+
+// When true, the host can hold ads and melee to kick a random bot
+// default value: false
+#define DEBUG_BOT_KICK = false;
+
+// When true, poi spawn system will be enabled by default
+// default value: false
+#define DEV_FORCE_POI_SPAWNS = false;
+
+// When true, all PAP machines will have a default actor attached to their origin and angles
+// default value: false
+#define DEBUG_PAP_ANGLES = false;
+
+// When true, all mystery boxes will have a default actor attached to their origin and angles
+// default value: false
+#define DEBUG_BOX_ANGLES = false;
+
+// When true, all wall weapons will have a default actor attached to their origin and angles
+// default value: false
+#define DEBUG_WALL_ANGLES = false;
+
+// When true, all perks will have a default actor attached to their origin and angles
+// default value: false
+#define DEBUG_PERK_ANGLES = false;
+
+// When true, all gum machines will have a default actor attached to their origin and angles
+// default value: false
+#define DEBUG_GUM_ANGLES = false;
+
 #endregion
 
 // add your custom maps here
@@ -661,11 +709,46 @@ custom_maps()
             
             // implement any gameplay scripting related to the map (ie: enabling PAP, unlocking places, etc.)
             // thread zm_custom_map_name_init();
+
+            // if your map needs a POI spawn generation (auto-spawns), invoke this.
+            // gm_generate_spawns();
+            break;
+
+        case "zm_kyassuruz":
+            // blocks the pap room which is locked behind quest objectives on this map
+            level.gm_blacklisted[level.gm_blacklisted.size] = "third_zoneb";
+            gm_generate_spawns(); // generate spawn points for this map, using the POI system
+            break;
+
+        case "zm_testlevel":
+            // blocks an out of map spot where cherry is at.
+            level.gm_blacklisted[level.gm_blacklisted.size] = "teleporter_zone";
+            gm_generate_spawns(); // generate spawn points for this map, using the POI system
             break;
         default:
             gm_generate_spawns();
             return;
     }
+}
+
+// a list of terms, which if found in a zone name, automatically blacklists the zone from allowing spawns
+// Note: due to performance reasons, you probably dont want to make this list too big.
+get_blacklist_zone_terms()
+{
+    return array
+    (
+        "boss",
+        "arena",
+        "egg",
+        "secret",
+        "fight"
+    );
+}
+
+// a list of zone names, that when encountered, are automatically blacklisted
+get_additional_blacklist()
+{
+    return [];
 }
 
 // runs on player spawn, intented to be used for custom weapon monitors.
@@ -679,4 +762,28 @@ custom_weapon_callbacks()
         default:
             return;
     }
+}
+
+// runs after blackscreen is passed, one time.
+custom_weapon_init()
+{
+
+}
+
+gm_adjust_custom_weapon(w_weapon, f_result, str_meansofdeath = "MOD_NONE", e_attacker = undefined)
+{
+    // implement any additional weapon weapon damage scalars here
+    // you can return a float because the damage callback will automatically 
+    if(level.script == "zm_kyassuruz")
+    {
+        if(issubstr(w_weapon.rootweapon.name, "bow"))
+        {
+            if(str_meansofdeath == "MOD_PROJECTILE_SPLASH")
+            {
+                return 1100 * level.round_number;
+            }
+            return 2100 * level.round_number;
+        }
+    }
+    return f_result; // return a float or an int, representing the final damage to do. Only applies to players.
 }

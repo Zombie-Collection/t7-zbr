@@ -1,3 +1,17 @@
+#define V_PAP_ANGLE_OFFSET = (0,-90,0);
+#define V_BOX_ANGLE_OFFSET = (0,90,0);
+#define V_WALL_ANGLE_OFFSET = (0,90,0);
+#define V_PERK_ANGLE_OFFSET = (0,-90,0);
+#define V_GUM_ANGLE_OFFSET = (0,-90,0);
+
+#define MAX_DOOR_POIS = 10;
+#define MAX_WALL_POIS = 10;
+#define MAX_BOX_POIS = 10;
+#define MAX_PERK_POIS = 10;
+#define MAX_GUM_POIS = 8;
+#define MAX_PAP_POIS = 2;
+#define MAX_POIS = 50; // extra clamp to reduce performance impact.
+
 initmaps()
 {
     if(isdefined(level.gm_init_maps) && level.gm_init_maps)
@@ -10,19 +24,16 @@ initmaps()
         thread zm_zonemgr::enable_zone(k);
     }
 
-    if(zm_weapons::is_weapon_included(GetWeapon("raygun_mark2")))
-    {
-        level.limited_weapons[GetWeapon("raygun_mark2")] = 4;
-    }
-
     if(!isdefined(level.b_use_poi_spawn_system))
     {
-        level.b_use_poi_spawn_system = false;
+        level.b_use_poi_spawn_system = IS_DEBUG && DEV_FORCE_POI_SPAWNS;
     }
     
     level.gm_spawns = [];
     level.gm_blacklisted = [];
     index = 0;
+
+    auto_blacklist_zones();
     switch(level.script)
     {
         case "zm_zod":
@@ -77,9 +88,7 @@ initmaps()
             break;
 
         case "zm_prototype":
-            level.gm_spawns[level.gm_spawns.size] = "upstairs_zone";
-            level.gm_spawns[level.gm_spawns.size] = "start_zone";
-            level.gm_spawns[level.gm_spawns.size] = "box_zone";
+            gm_generate_spawns(); // this map is just too small, so we can populate more spawn points and use POI spawns
         break;
 
         case "zm_asylum":
@@ -382,7 +391,6 @@ zm_zod_pap()
 
     level.zombie_weapons[getweapon("idgun_0")].is_in_box = 1;
     level.zombie_weapons[getweapon("idgun_0")].upgrade = getweapon("idgun_upgraded_0");
-    level.limited_weapons[getweapon("idgun_0")] = 4;
 
     level.aat_exemptions[getweapon("idgun_0")] = 1;
     level.aat_exemptions[getweapon("idgun_upgraded_0")] = 1;
@@ -395,7 +403,6 @@ zm_zod_pap()
     
     level.zombie_weapons[getweapon("tesla_gun")].is_in_box = 1;
     level.zombie_weapons[getweapon("tesla_gun")].upgrade = getweapon("tesla_gun_upgraded");
-    level.limited_weapons[getweapon("tesla_gun")] = 4;
 
     locker = level.var_ca7eab3b;
     locker.var_116811f0 = 3;
@@ -442,11 +449,6 @@ zm_stalingrad_pap()
     // disable drones
     level._achievement_monitor_func = level.achievement_monitor_func;
     level.achievement_monitor_func = ::Kill_Sentinels;
-
-    level.limited_weapons[GetWeapon("raygun_mark3")] = 4;
-
-    level._riotshield_melee_power = level.riotshield_melee_power;
-    level.riotshield_melee_power = ::dragon_shield_melee;
 
     ctrl = struct::get("dragon_strike_controller");
     level flag::set("dragon_strike_unlocked");
@@ -554,8 +556,6 @@ zm_temple_pap()
 	
 	if(isdefined(level.brush_pap_side_r))
 		level.brush_pap_side_r _pap_brush_connect_paths();
-
-    level.limited_weapons[getweapon("shrink_ray")] = 4;
 }
 
 _pap_brush_connect_paths()
@@ -574,6 +574,15 @@ zm_tomb_pap()
     level.mechz_min_round_fq = 5;
 	level.mechz_max_round_fq = 6;
     level.a_e_slow_areas = [];
+
+    setdvar("zombie_unlock_all", 1);
+    zombie_doors = GetEntArray("zombie_debris", "targetname");
+    foreach(door in zombie_doors)
+    {
+        door notify("trigger", level.players[0], 1);
+    }
+    wait 0.1;
+    setdvar("zombie_unlock_all", 0);
 
     // power the generators permanently
     level.zone_capture.spawn_func_recapture_zombie = ::killzomb_tomb;
@@ -802,14 +811,6 @@ zm_factory_pap()
 zm_castle_pap()
 {
     level flag::wait_till("initial_blackscreen_passed");
-
-    // grav spikes hook
-    level.old_gs_wield_fn = level._hero_weapons[getweapon("hero_gravityspikes_melee")].wield_fn;
-    level.old_gs_unwield_fn = level._hero_weapons[getweapon("hero_gravityspikes_melee")].unwield_fn;
-
-    level._hero_weapons[getweapon("hero_gravityspikes_melee")].wield_fn = ::wield_gravityspikes;
-    level._hero_weapons[getweapon("hero_gravityspikes_melee")].unwield_fn = ::unwield_gravityspikes;
-
     foreach(m in struct::get_array("s_pap_tp"))
     {
         the_stub = undefined;
@@ -831,7 +832,6 @@ zm_castle_pap()
     }
 
     old_origin = level.var_54cd8d06.origin;
-
     level.var_54cd8d06 setorigin(level.players[0]);
     level flag::wait_till("pap_reformed");
     level.var_54cd8d06 setorigin(old_origin);
@@ -893,7 +893,6 @@ zm_island_pap()
     level.var_2cb8e184 = 0;
     level clientfield::set("add_ww_to_box", 1);
     level.zombie_weapons[GetWeapon("hero_mirg2000")].is_in_box = 1;
-    level.limited_weapons[GetWeapon("hero_mirg2000")] = 4;
     level.CustomRandomWeaponWeights = ::zm_island_boxweight;
     thread zm_island_byethrashers();
     wait .25;
@@ -1021,16 +1020,7 @@ zm_genesis_map()
     for(i = 0; i < 4; i++)
     {
         level.zombie_weapons[getweapon("idgun_" + i)].is_in_box = 1;
-        level.limited_weapons[getweapon("idgun_" + i)] = 4;
     }
-
-    // grav spikes hook
-    level.old_gs_wield_fn = level._hero_weapons[getweapon("hero_gravityspikes_melee")].wield_fn;
-    level.old_gs_unwield_fn = level._hero_weapons[getweapon("hero_gravityspikes_melee")].unwield_fn;
-
-    level._hero_weapons[getweapon("hero_gravityspikes_melee")].wield_fn = ::wield_gravityspikes;
-    level._hero_weapons[getweapon("hero_gravityspikes_melee")].unwield_fn = ::unwield_gravityspikes;
-
     to_remove = [];
     blacklist = [
                     struct::get_array("companion_totem_part", "targetname")[0].model,
@@ -1044,6 +1034,77 @@ zm_genesis_map()
         to_remove[to_remove.size] = model;
     }
     array::thread_all(to_remove, sys::delete);
+    
+    turrets = zm_genesis_collect_turrets();
+    array::thread_all(turrets, serious::zm_genesis_turret_pvp);
+}
+
+// hacky way to collect all the turrets by using their triggers
+zm_genesis_collect_turrets()
+{
+    turrets = [];
+    if(isdefined(level._unitriggers.dynamic_stubs) && isarray(level._unitriggers.dynamic_stubs))
+    {
+        foreach(s_trigger in level._unitriggers.dynamic_stubs)
+        {
+            if(isdefined(s_trigger.vh_turret))
+            {
+                turrets[turrets.size] = s_trigger.vh_turret;
+            }
+        }
+    }
+    foreach(s_zone in level.zones)
+    {
+        if(!isdefined(s_zone.unitrigger_stubs) || !isarray(s_zone.unitrigger_stubs))
+        {
+            continue;
+        }
+        foreach(s_trigger in s_zone.unitrigger_stubs)
+        {
+            if(isdefined(s_trigger.vh_turret))
+            {
+                turrets[turrets.size] = s_trigger.vh_turret;
+            }
+        }
+    }
+    return turrets;
+}
+
+zm_genesis_turret_pvp()
+{
+    level endon("game_ended");
+    while(true)
+    {
+        self waittill("weapon_fired");
+        e_player = self getvehicleowner();
+		self thread zm_genesis_beam_damage_think();
+		while(zm_utility::is_player_valid(e_player) && e_player attackbuttonpressed() && isdefined(self getvehicleowner()) && e_player == self getvehicleowner())
+        {
+            wait(0.05);
+        }
+    }
+}
+
+zm_genesis_beam_damage_think()
+{
+    self endon("stop_damage");
+    n_wait_time = 0.1;
+	while(true)
+	{
+        wait(n_wait_time);
+		e_player = self getvehicleowner();
+		should_damage = 1;
+		v_position = self gettagorigin("tag_aim");
+		v_forward = anglestoforward(self gettagangles("tag_aim"));
+		a_trace = beamtrace(v_position, v_position + v_forward * 20000, 1, self);
+		v_hit_location = a_trace["position"];
+		if(!isdefined(a_trace["entity"])) continue;
+        if(!isplayer(a_trace["entity"])) continue;
+        player = a_trace["entity"];
+        if(player.sessionstate != "playing") continue;
+        if(player == e_player) continue;
+        player doDamage(int(GENESIS_TURRET_DPS * n_wait_time), v_hit_location, e_player, undefined, "none", "MOD_UNKNOWN", 0, level.weaponnone);
+	}
 }
 
 zm_moon_pap()
@@ -1082,7 +1143,6 @@ zm_moon_pap()
         pap.origin = pap_spot;
     }
 
-    level.limited_weapons[getweapon("microwavegundw")] = 4;
     if(IS_DEBUG && DEBUG_WAVE_GUN)
     {
         weapon = getweapon("microwavegundw");
@@ -1139,10 +1199,7 @@ zm_moon_fixes()
     level flag::set("zombie_drop_powerups");
     level.round_spawn_func = zm::round_spawning;
     level flag::set("teleporter_used");
-
     getent("generator_teleporter", "targetname").origin = (99999,99999,-99999);
-
-
     wait 10;
     level.speed_cola_ents[1].origin = (225, 2395, -566);
     level.speed_cola_ents[1] triggerenable(1);
@@ -1204,11 +1261,7 @@ gm_generate_spawns()
     zones = [];
     foreach(k, v in level.zones)
     {
-        if(isSubStr(k, "boss") || isSubStr(k, "arena") || isSubStr(k, "secret") || isSubStr(k, "egg"))
-        {
-            level.gm_blacklisted[level.gm_blacklisted.size] = k;
-            continue;
-        }
+        if(isinarray(level.gm_blacklisted, k)) continue;
         zones[zones.size] = k;
     }
     spawns = CollectAllSpawns(zones);
@@ -1227,6 +1280,7 @@ gm_generate_spawns()
         }
     }
 
+    /*
     if(level.gm_spawns.size < 4)
     {
         foreach(zone in level.gm_spawns)
@@ -1243,11 +1297,12 @@ gm_generate_spawns()
             if(level.gm_spawns.size >= 4) return;
         }
     }
-
+    */
+    
     if(level.gm_spawns.size < 4)
     {
-        level.b_use_poi_spawn_system = true;
         gm_generate_poi_spawns();
+        level.b_use_poi_spawn_system = true;
     }
 }
 
@@ -1360,6 +1415,7 @@ gm_generate_poi_spawns()
     a_v_poi = arraycombine(a_v_poi, gm_find_door_origins(), false, false);
     a_v_poi = arraycombine(a_v_poi, gm_find_wallbuy_origins(), false, false);
     a_v_poi = array::remove_undefined(a_v_poi, false);
+    a_v_poi = gm_limit_poi_set(a_v_poi, MAX_POIS);
 
     // 2. For each poi, positionquery_source_navigation
         // Foreach returned point, check ispointonnavmesh
@@ -1376,7 +1432,8 @@ gm_generate_poi_spawns()
     level.a_v_poi_spawns = [];
     foreach(v_point in a_v_poi)
     {
-        points = util::positionquery_pointarray(v_point, 50, 300, 100, 50);
+        if(is_point_in_bad_zone(v_point)) continue;
+        points = util::positionquery_pointarray(v_point, 0, 100, 150, 50); // tightening these parameters produces less variance, but it also makes sure people dont spawn in weird spots.
         if(!isdefined(points)) continue;
         points = array::randomize(points);
         foreach(potential in points)
@@ -1411,7 +1468,19 @@ gm_find_pap_origins()
         if(!isdefined(ent))
             continue;
 
-        a_v_paps[a_v_paps.size] = ent.origin;
+        if(!isdefined(ent.angles) || !isdefined(ent.origin)) 
+        {
+            continue;
+        }
+
+        angles = ent.angles + V_PAP_ANGLE_OFFSET;
+        origin = gm_calc_poi_offset(ent.origin, angles);
+        if(IS_DEBUG && DEBUG_PAP_ANGLES)
+        {
+            dev_actor(origin, angles);
+        }
+
+        a_v_paps[a_v_paps.size] = origin;
     }
     
     foreach(pap in GetEntArray("specialty_weapupgrade", "script_noteworthy"))
@@ -1424,19 +1493,51 @@ gm_find_pap_origins()
         if(!isdefined(ent))
             continue;
 
-        a_v_paps[a_v_paps.size] = ent.origin;
+        if(!isdefined(ent.angles) || !isdefined(ent.origin)) 
+        {
+            continue;
+        }
+
+        angles = ent.angles + V_PAP_ANGLE_OFFSET;
+        origin = gm_calc_poi_offset(ent.origin, angles);
+        if(IS_DEBUG && DEBUG_PAP_ANGLES)
+        {
+            dev_actor(origin, angles);
+        }
+
+        a_v_paps[a_v_paps.size] = origin;
     }
-    return a_v_paps;
+    return gm_limit_poi_set(a_v_paps, MAX_PAP_POIS);
 }
 
 gm_find_perk_origins()
 {
-    a_v_perks = [];
-    foreach(perk in getentarray("zombie_vending", "targetname"))
+    if(level.script == "zm_moon") 
     {
-        array::add(a_v_perks, perk.origin, 0);
+        return []; // prevents spawning on area 51
     }
-    return a_v_perks;
+    a_v_perks = [];
+    foreach(perk in level._custom_perks)
+    {
+        if(!isdefined(perk.radiant_machine_name)) continue;
+        ent_array = getentarray(perk.radiant_machine_name, "targetname");
+        if(ent_array.size < 1) continue;
+        foreach(ent in ent_array)
+        {
+            if(!isdefined(ent.angles) || !isdefined(ent.origin)) 
+            {
+                continue;
+            }
+            angles = ent.angles + V_PERK_ANGLE_OFFSET;
+            origin = gm_calc_poi_offset(ent.origin, angles);
+            if(IS_DEBUG && DEBUG_PERK_ANGLES)
+            {
+                dev_actor(origin, angles);
+            }
+            array::add(a_v_perks, origin, 0);
+        }
+    }
+    return gm_limit_poi_set(a_v_perks, MAX_PERK_POIS);
 }
 
 gm_find_box_origins()
@@ -1444,9 +1545,20 @@ gm_find_box_origins()
     a_v_boxes = [];
     foreach(box in level.chests)
     {
-        a_v_boxes[a_v_boxes.size] = isdefined(box.orig_origin) ? box.orig_origin : box.origin;
+        v_position = isdefined(box.orig_origin) ? box.orig_origin : box.origin;
+        if(!isdefined(box.angles) || !isdefined(v_position)) 
+        {
+            continue;
+        }
+        angles = box.angles + V_BOX_ANGLE_OFFSET;
+        origin = gm_calc_poi_offset(v_position, angles);
+        if(IS_DEBUG && DEBUG_BOX_ANGLES)
+        {
+            dev_actor(origin, angles);
+        }
+        a_v_boxes[a_v_boxes.size] = origin;
     }
-    return a_v_boxes;
+    return gm_limit_poi_set(a_v_boxes, MAX_BOX_POIS);
 }
 
 gm_find_gum_origins()
@@ -1454,9 +1566,19 @@ gm_find_gum_origins()
     a_v_gums = [];
     foreach(trig in getentarray("bgb_machine_use", "targetname"))
     {
-        a_v_gums[a_v_gums.size] = trig.origin;
+        if(!isdefined(trig.angles) || !isdefined(trig.origin)) 
+        {
+            continue;
+        }
+        angles = trig.angles + V_GUM_ANGLE_OFFSET;
+        origin = gm_calc_poi_offset(trig.origin, angles);
+        if(IS_DEBUG && DEBUG_GUM_ANGLES)
+        {
+            dev_actor(origin, angles);
+        }
+        a_v_gums[a_v_gums.size] = origin;
     }
-    return a_v_gums;
+    return gm_limit_poi_set(a_v_gums, MAX_GUM_POIS);
 }
 
 gm_find_door_origins()
@@ -1468,10 +1590,14 @@ gm_find_door_origins()
         zombie_doors = GetEntArray(type, "targetname");
         foreach(door in zombie_doors)
         {
+            if(!isdefined(door.origin)) 
+            {
+                continue;
+            }
             a_v_doors[a_v_doors.size] = door.origin;
         }
     }
-    return a_v_doors;
+    return gm_limit_poi_set(a_v_doors, MAX_DOOR_POIS);
 }
 
 gm_find_wallbuy_origins()
@@ -1488,9 +1614,21 @@ gm_find_wallbuy_origins()
 	}
     foreach(weapon in spawnable_weapon_spawns)
     {
-        a_v_weapons[a_v_weapons.size] = weapon.origin;
+        if(!isdefined(weapon.angles) || !isdefined(weapon.origin)) 
+        {
+            continue;
+        }
+        angles = weapon.angles + V_WALL_ANGLE_OFFSET;
+        origin = gm_calc_poi_offset(weapon.origin, angles);
+        origin = groundtrace(origin, origin + (0,0,-1000), 0, undefined)["position"];
+        if(!isdefined(origin)) continue;
+        if(IS_DEBUG && DEBUG_WALL_ANGLES)
+        {
+            dev_actor(origin, angles);
+        }
+        a_v_weapons[a_v_weapons.size] = origin;
     }
-    return a_v_weapons;
+    return gm_limit_poi_set(a_v_weapons, MAX_WALL_POIS);
 }
 
 gm_search_pois(a_v_spawns = [], target_player)
@@ -1531,4 +1669,71 @@ gm_search_pois(a_v_spawns = [], target_player)
         }
     }
     return remaining_points[i_max];
+}
+
+gm_calc_poi_offset(origin, angles)
+{
+    return VectorScale(anglesToForward(angles), 50) + origin;
+}
+
+// uses a blacklist of zones to check against every possible POI spawn generated.
+is_point_in_bad_zone(v_point)
+{
+    // prevents a scenario where the only zones in the map meet auto-blacklist criteria, which would generate no spawns
+    if(!single_check_enough_zones()) return false;
+    foreach(target_zone in level.gm_blacklisted)
+    {
+        if(is_point_inside_zone(v_point, target_zone))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+single_check_enough_zones()
+{
+    if(isdefined(level.gm_single_check_enough_zones))
+    {
+        return level.gm_single_check_enough_zones;
+    }
+    level.gm_single_check_enough_zones = true;
+    foreach(k, v in level.zones)
+    {
+        if(!isinarray(level.gm_blacklisted, k)) return true;
+    }
+    level.gm_single_check_enough_zones = false;
+    return false;
+}
+
+auto_blacklist_zones()
+{
+    terms = get_blacklist_zone_terms();
+    foreach(k, v in level.zones)
+    {
+        foreach(term in terms)
+        {
+            if(issubstr(k, term))
+            {
+                level.gm_blacklisted[level.gm_blacklisted.size] = k;
+                break;
+            }
+        }
+    }
+    level.gm_blacklisted = arraycombine(level.gm_blacklisted, get_additional_blacklist(), 0, 0);
+}
+
+gm_limit_poi_set(a_poi_set = [], count = 0)
+{
+    if(a_poi_set.size <= count)
+    {
+        return a_poi_set;
+    }
+    a_poi_set = array::randomize(a_poi_set);
+    a_v_copy = [];
+    for(i = 0; i < count; i++)
+    {
+        a_v_copy[i] = a_poi_set[i];
+    }
+    return a_v_copy;
 }

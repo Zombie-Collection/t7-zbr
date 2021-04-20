@@ -56,6 +56,9 @@
 #include scripts\zm\bgbs\_zm_bgb_idle_eyes;
 #include scripts\zm\_zm_powerups;
 #include scripts\zm\bgbs\_zm_bgb_mind_blown;
+#include scripts\zm\_zm_blockers;
+#include scripts\zm\_zm_equipment;
+#include scripts\zm\_zm_pack_a_punch_util;
 
 //required
 #namespace serious;

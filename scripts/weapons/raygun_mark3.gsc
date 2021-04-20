@@ -1,6 +1,6 @@
 raygun_mk3_monitor()
 {
-    if(level.script != "zm_stalingrad") return;
+    if(!isdefined(level.w_raygun_mark3lh)) return;
     self endon("disconnect");
     self endon("spawned_player");
     self endon("bled_out");

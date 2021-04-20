@@ -1,7 +1,6 @@
 monitor_thundergun_pvp()
 {
-    if(!isdefined(GetWeapon("thundergun")) || !isdefined(GetWeapon("thundergun").name)) return;
-
+    if(!isdefined(level.weaponzmthundergun)) return;
     self endon("disconnect");
     self notify("monitor_thundergun_pvp");
     self endon("monitor_thundergun_pvp");
@@ -14,8 +13,6 @@ monitor_thundergun_pvp()
         self switchToWeapon(GetWeapon("thundergun"));
         self giveMaxAmmo(GetWeapon("thundergun"));
     }
-
-    level.limited_weapons[GetWeapon("thundergun")] = 4;
 
 	for(;;)
 	{
