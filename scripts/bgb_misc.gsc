@@ -461,3 +461,39 @@ blow_mind(player)
 	player shellshock("flashbang", 1.0, 0);
 	player arc_damage_ent(self, 1, level.zm_aat_dead_wire_lightning_chain_params);
 }
+
+anywhere_but_here_activation()
+{
+	b_callback_set = false;
+	if(level.b_use_poi_spawn_system && (!isdefined(level.var_2c12d9a6) || (level.var_2c12d9a6 != serious::bgb_get_poi_spawn)))
+	{
+		old_callback = level.var_2c12d9a6;
+		level.var_2c12d9a6 = serious::bgb_get_poi_spawn;
+		b_callback_set = true;
+	}
+	self zm_bgb_anywhere_but_here::activation();
+	if(b_callback_set)
+	{
+		level.var_2c12d9a6 = old_callback;
+	}
+}
+
+bgb_get_poi_spawn()
+{
+	possible_spawns = arraycopy(level.struct_class_names["targetname"]["poi_spawn_point"]);
+	closest_spawns = array::get_all_closest(self.origin, possible_spawns, undefined, undefined, 10000);
+	if(closest_spawns.size < 1)
+	{
+		return array::random(possible_spawns);
+	}
+	to_remove = int(min(possible_spawns.size * 0.2, closest_spawns.size));
+	if(to_remove < 1 && (possible_spawns.size > 1))
+	{
+		to_remove = 1;
+	}
+	for(i = 0; i < to_remove; i++)
+	{
+		arrayremovevalue(possible_spawns, closest_spawns[i], false);
+	}
+	return array::random(possible_spawns);
+}

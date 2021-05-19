@@ -44,8 +44,8 @@ electric_cherry_stun()
 	self endon("stun_zombie");
 
 	if(self.sessionstate != "playing" || self.health <= 0) return;
-    self setMoveSpeedScale(.5);
+    self set_move_speed_scale(.5);
     if(!self util::is_bot()) self SetElectrified(2);
     wait 2;
-    self setMoveSpeedScale(1);
+    self set_move_speed_scale(1);
 }

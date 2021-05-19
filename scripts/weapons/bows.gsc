@@ -509,12 +509,12 @@ storm_bolt_do_shock(e_player, bolt_origin, attacking_bolt)
 	n_lifetime = min(n_lifetime, attacking_bolt.n_lifetime);
     self thread playFXTimedOnTag(level._effect["tesla_shock"], "j_head", n_lifetime);
     self playsound("zmb_elec_jib_zombie");
-    self setMoveSpeedScale(.5);
+    self set_move_speed_scale(.5);
     self.zombie_tesla_hit = 1;
     if(!self util::is_bot()) self SetElectrified(n_lifetime);
 	wait n_lifetime;
     self.zombie_tesla_hit = 0;
-    self setMoveSpeedScale(1);
+    self set_move_speed_scale(1);
 }
 
 missile_impact_bow_demongate(weapon, position, radius, attacker, normal)
@@ -769,10 +769,10 @@ chomper_slow_player(n_wait_time = 2)
     self endon("chomper_slow_player");
     self endon("disconnect");
     self endon("bled_out");
-	self setMoveSpeedScale(0.1);
+	self set_move_speed_scale(0.1);
     if(!self util::is_bot()) self shellshock("pain_zm", n_wait_time * 0.75);
     wait n_wait_time;
-	self setMoveSpeedScale(1);
+	self set_move_speed_scale(1);
 }
 
 chomper_do_damage(e_player, n_damage)

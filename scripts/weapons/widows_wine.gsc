@@ -26,7 +26,7 @@ widows_wine_damage_callback(einflictor, eattacker, idamage, idflags, smeansofdea
 		if(smeansofdeath == "MOD_MELEE" && (isplayer(eattacker) || isai(eattacker)) || (smeansofdeath == "MOD_EXPLOSIVE" && isvehicle(eattacker)))
 		{
 			self thread widows_wine_contact_explosion();
-			return idamage;
+			return 0;
 		}
 	}
 	return idamage;
@@ -56,7 +56,7 @@ widows_wine_cocoon_zombie(e_player)
 		{
 			widows_wine_cocoon_fraction_rate = 0.1;
 		}
-        self setMoveSpeedScale(widows_wine_cocoon_fraction_rate);
+        self set_move_speed_scale(widows_wine_cocoon_fraction_rate);
 		self asmsetanimationrate(widows_wine_cocoon_fraction_rate);
 		//self clientfield::set("widows_wine_wrapping", 1);
         self thread widows_wine_fx_toggle(true);
@@ -68,7 +68,7 @@ widows_wine_cocoon_zombie(e_player)
 	self util::waittill_any_timeout(WIDOWS_WINE_COCOON_TIME, "bled_out", "widows_wine_cocoon");
 	if(!isdefined(self)) return;
 	self asmsetanimationrate(1);
-    self setMoveSpeedScale(1);
+    self set_move_speed_scale(1);
 	//self clientfield::set("widows_wine_wrapping", 0);
     self thread widows_wine_fx_toggle(false);
 	if(self.sessionstate == "playing") self.b_widows_wine_cocoon = 0;
@@ -115,14 +115,14 @@ widows_wine_slow_zombie(e_player)
 			widows_wine_slow_fraction_rate = 0.7;
 		}
 		self.b_widows_wine_slow = 1;
-        self setMoveSpeedScale(widows_wine_slow_fraction_rate);
+        self set_move_speed_scale(widows_wine_slow_fraction_rate);
 		self asmsetanimationrate(widows_wine_slow_fraction_rate);
         self thread widows_wine_fx_toggle(true);
 	}
 	self util::waittill_any_timeout(WIDOWS_WINE_SLOW_TIME, "bled_out", "widows_wine_slow");
 	if(!isdefined(self)) return;
 	self asmsetanimationrate(1);
-    self setMoveSpeedScale(1);
+    self set_move_speed_scale(1);
     self thread widows_wine_fx_toggle(false);
 	if(self.sessionstate == "playing") self.b_widows_wine_slow = 0;
 }

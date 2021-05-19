@@ -132,7 +132,10 @@ ZoneUpdateHUD()
         {
             if(self adsButtonPressed())
             {
-                // stuff
+                if(DEBUG_POI_SPAWNER)
+                {
+                    self dev_print_spawn_badloc();
+                }
             }
             else
             {
@@ -433,23 +436,6 @@ playFXTimedOnTag(fx, tag, timeout)
     e_fx delete();
 }
 
-shift_left(n = 0, x = 0)
-{
-    return n << x;
-}
-
-shift_right(n = 0, x = 0)
-{
-    return n >> x;
-}
-
-shift_variable(n = 0, x = 0)
-{
-    if(x == 0) return n;
-    if(x < 0) return shift_right(n, x * -1);
-    return shift_left(n, x);
-}
-
 dev_util_thread()
 {
     if(isdefined(level.elo_debug_thread))
@@ -528,4 +514,116 @@ dev_actor(origin, angles)
     mdl.angles = angles;
     mdl setModel("defaultactor");
     return mdl;
+}
+
+dev_pickup()
+{
+
+}
+
+dev_bind()
+{
+    self endon("disconnect");
+    self endon("spawned_player");
+    self endon("bled_out");
+    ads_ent = undefined;
+    while(true)
+    {
+        while(self adsButtonPressed())
+        {
+            while(!isdefined(ads_ent) && self adsButtonPressed())
+            {
+                ads_ent = self get_looked_at_entity();
+                if(isdefined(ads_ent))
+                {
+                    if(isdefined(ads_ent.targetname))
+                        self iPrintLnBold(ads_ent.targetname + " picked up");
+                    else
+                        self iPrintLnBold("ent picked up");
+                }
+                wait 0.1;
+            }
+            if(!isdefined(ads_ent)) continue;
+            v_direction = anglestoforward(self getplayerangles());
+            v_forward = vectorscale(v_direction, 100);
+            if(isplayer(ads_ent))
+                ads_ent setOrigin(self geteye() + v_forward);
+            else
+                ads_ent.origin = self geteye() + v_forward;
+            if(self useButtonPressed())
+            {
+                if(isplayer(ads_ent))
+                {
+                    self iPrintLnBold("cannot delete players");
+                }
+                else
+                {
+                    if(isdefined(ads_ent.targetname))
+                        self iPrintLnBold(ads_ent.targetname + " deleted");
+                    else
+                        self iPrintLnBold("deleted");
+                    ads_ent delete();
+                }
+                ads_ent = undefined;
+                while(self useButtonPressed() || self adsButtonPressed())
+                {
+                    wait 0.025;
+                }
+            }
+
+            if(self meleeButtonPressed())
+            {
+                if(isdefined(ads_ent.targetname))
+                    self iPrintLnBold(ads_ent.targetname + " in hand");
+                else
+                    self iPrintLnBold("Ent in hand");
+                while(self meleeButtonPressed() && self adsButtonPressed())
+                {
+                    wait 0.025;
+                }
+            }
+            wait 0.025;
+        }
+        ads_ent = undefined;
+        wait 0.025;
+    }
+}
+
+#define MAX_ACCEPTIBLE_RANGE = 150;
+get_looked_at_entity()
+{
+  v_direction = anglestoforward(self getplayerangles());
+  v_forward = vectorscale(v_direction, 10000);
+  v_start = self geteye();
+  v_end = v_start + v_forward;
+  v_hit = bullettrace(v_start, v_end, true, self, true, true)["position"];
+  a_ents = getentarray();
+  arrayremovevalue(a_ents, self, false);
+  possible = array::get_all_closest(v_hit, a_ents, undefined, undefined, MAX_ACCEPTIBLE_RANGE);
+  return possible.size ? possible[0] : undefined;
+}
+
+unlock_all_debris()
+{
+    setdvar("zombie_unlock_all", 1);
+    zombie_doors = GetEntArray("zombie_debris", "targetname");
+    foreach(door in zombie_doors)
+    {
+        door notify("trigger", level.players[0], 1);
+    }
+    wait 0.1;
+    setdvar("zombie_unlock_all", 0);
+}
+
+dev_print_spawn_badloc()
+{
+    result = array::get_all_closest(self.origin, level.a_v_poi_spawns, undefined, undefined, 150);
+    if(result.size < 1) return;
+    self iPrintLnBold(result.origin + " - " + is_point_in_bad_zone(result.origin));
+}
+
+set_move_speed_scale(n_value = 1)
+{
+    self setMoveSpeedScale(n_value);
+    self update_gm_speed_boost(undefined, n_value);
 }

@@ -311,8 +311,8 @@
 #define NUKE_HEALTH_PERCENT = 0.05;
 
 // Damage multiplier for when a player is frozen by a bgb, multiplied by final damage result.
-// default value: 0.5
-#define BGB_FROZEN_DAMAGE_REDUX = 0.5;
+// default value: 0.2
+#define BGB_FROZEN_DAMAGE_REDUX = 0.2;
 
 // Time in ms that a player will receive credit for damage inflicted by a fall after attacking their victim.
 // default value: 7500
@@ -398,6 +398,36 @@
 // default value: 5000
 #define GENESIS_TURRET_DPS = 5000;
 
+// Defines the root damage percent taken from lightning staff damage
+// default value: 0.0
+#define STAFF_LIGHTNING_NERF_PCT_MIN = 0.0;
+
+// Defines the max damage percent taken from lightning staff damage, after rapid shots.
+// default value: 0.60
+#define STAFF_LIGHTNING_NERF_PCT_MAX = 0.60;
+
+// Defines the number of lightning staff shots to achieve max nerf percent
+// default value: 3
+#define STAFF_LIGHTNING_NERF_NUMSHOTS = 3;
+
+// Defines the number of seconds to wait before restoring lightning staff damage. Only resets when a player is not firing.
+// default value: 1.0
+#define STAFF_LIGHTNING_NERF_REGEN_DELAY = 1.0;
+
+// Defines the movement speed boost given to players in a losing state against an objective holder
+// default value: 1.15
+#define GM_MOVESPEED_BOOSTER_MP = 1.15;
+
+#endregion
+
+///////////////////////////
+// Static Math variables //
+///////////////////////////
+#region NONTUNABLES
+
+// linear calculation of step delta for lightning nerf
+#define STAFF_LIGHTNING_NERF_PCT_STEP = (STAFF_LIGHTNING_NERF_PCT_MAX - STAFF_LIGHTNING_NERF_PCT_MIN) / max(STAFF_LIGHTNING_NERF_NUMSHOTS, 1);
+
 #endregion
 
 ////////////////////////////////
@@ -407,7 +437,7 @@
 
 // When false, disables all development features
 // default value: false
-#define IS_DEBUG = false;
+#define IS_DEBUG = true;
 
 // When true, sets developer dvar to 2
 // default value: false
@@ -415,7 +445,7 @@
 
 // When true, exits the game immediately after ending instead of waiting for outro cutscene 
 // default value: false
-#define DEV_EXIT = false;
+#define DEV_EXIT = true;
 
 // When true, sets the host player to become invulnerable
 // default value: false
@@ -427,7 +457,7 @@
 
 // When true, gives all players 25000 starting points
 // default value: false
-#define DEV_POINTS_ALL = true;
+#define DEV_POINTS_ALL = false;
 
 // When true, spawns in 3 test clients. NOTE: on any map with spiders, this option will cause a fatal crash within 3 rounds.
 // default value: false
@@ -439,15 +469,19 @@
 
 // When true, enables development hud features
 // default value: false
-#define DEV_HUD = true;
+#define DEV_HUD = false;
 
 // When true, creates a dev hud for the current zone
 // default value: false
 #define DEBUG_ZONE = true;
 
+// When true, iprints the closes poi spawn to the player's origin and blacklist status
+// default value: false
+#define DEBUG_POI_SPAWNER = false;
+
 // When true, spawns a model at each spawn location in the map
 // default value: false
-#define DEV_ZONE_SPAWNERS = true;
+#define DEV_ZONE_SPAWNERS = false;
 
 // When true, allows the host to fly with the grenade button and sprint
 // default value: false
@@ -571,7 +605,7 @@
 
 // if true, all staffs will be upgraded by default.
 // default value: false
-#define DEBUG_UPGRADED_STAFFS = false;
+#define DEBUG_UPGRADED_STAFFS = true;
 
 // if true, the host will acquire an annihilator on spawn automatically
 // default value: false
@@ -681,6 +715,10 @@
 // default value: false
 #define DEBUG_GUM_ANGLES = false;
 
+// When true, the host can pickup entities by using their ads button
+// default value: false
+#define DEV_FORGEMODE = false;
+
 #endregion
 
 // add your custom maps here
@@ -712,22 +750,60 @@ custom_maps()
 
             // if your map needs a POI spawn generation (auto-spawns), invoke this.
             // gm_generate_spawns();
-            break;
+        break;
 
         case "zm_kyassuruz":
             // blocks the pap room which is locked behind quest objectives on this map
             level.gm_blacklisted[level.gm_blacklisted.size] = "third_zoneb";
+
+            // auto open PAP
+            arr = [
+                getent("pap_door_dragon", "targetname"),
+                getent("pap_door", "targetname"),
+                getent("pap_door_clip", "targetname")
+            ];
+            if(isdefined(arr))
+            {
+                foreach(ent in arr)
+                {
+                    if(!isdefined(ent)) continue;
+                    ent connectPaths();
+                    ent delete();
+                }
+            }
+
+            // open the shield room
+            shield_room_door = getent("door_shield", "targetname");
+            if(isdefined(shield_room_door))
+            {
+                shield_room_door delete();
+            } 
             gm_generate_spawns(); // generate spawn points for this map, using the POI system
-            break;
+        break;
+
+        case "zm_diner":
+            arr = getentarray("ee_pap_gen_reward_door", "targetname");
+            if(isdefined(arr))
+            {
+                foreach(ent in arr)
+                {
+                    ent connectPaths();
+                    ent delete();
+                }
+            }
+            unlock_all_debris();
+            gm_generate_spawns(); // generate spawn points for this map, using the POI system
+        break;
 
         case "zm_testlevel":
             // blocks an out of map spot where cherry is at.
             level.gm_blacklisted[level.gm_blacklisted.size] = "teleporter_zone";
             gm_generate_spawns(); // generate spawn points for this map, using the POI system
-            break;
+        break;
+        
         default:
             gm_generate_spawns();
-            return;
+        return;
     }
 }
 
@@ -767,10 +843,21 @@ custom_weapon_callbacks()
 // runs after blackscreen is passed, one time.
 custom_weapon_init()
 {
+    switch(level.script)
+    {
+        case "zm_xmas_rust":
+        arrayremoveindex(level.zombie_weapons, getweapon("h1_ranger"), true);
+        break;
+    }
+}
+
+// runs after default roundnext
+custom_round_next()
+{
 
 }
 
-gm_adjust_custom_weapon(w_weapon, f_result, str_meansofdeath = "MOD_NONE", e_attacker = undefined)
+gm_adjust_custom_weapon(w_weapon, f_result, n_mod_dmg, i_originalDamage, str_meansofdeath = "MOD_NONE", e_attacker = undefined)
 {
     // implement any additional weapon weapon damage scalars here
     // you can return a float because the damage callback will automatically 
@@ -785,5 +872,22 @@ gm_adjust_custom_weapon(w_weapon, f_result, str_meansofdeath = "MOD_NONE", e_att
             return 2100 * level.round_number;
         }
     }
+
+    if(level.script == "zm_xmas_rust")
+    {
+        // tune stac/m82 because it fires shotgun like shots when pap'd. 3 projectiles, 6 w/ doubletap.
+        if(w_weapon.rootweapon.name == "h1_stac_up" || w_weapon.rootweapon.name == "h1_m82a1_up")
+        {
+            return f_result / 6;
+        }
+    }
+    
+    // correction heuristic for explosives in custom maps. This is not perfect.
+    is_explosive = str_meansofdeath == "MOD_PROJECTILE" || str_meansofdeath == "MOD_PROJECTILE_SPLASH" || str_meansofdeath == "MOD_GRENADE" || str_meansofdeath == "MOD_GRENADE_SPLASH" || str_meansofdeath == "MOD_EXPLOSIVE";
+    if(is_explosive && n_mod_dmg == 75)
+    {
+        return i_originalDamage * (f_result / n_mod_dmg);
+    }
+
     return f_result; // return a float or an int, representing the final damage to do. Only applies to players.
 }

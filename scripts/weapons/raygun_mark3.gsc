@@ -25,10 +25,10 @@ mark3_slow(b_upgraded = 0)
     self endon("bled_out");
     self endon("disconnect");
     level endon("game_ended");
-    self setMoveSpeedScale(0.5 / (1 + b_upgraded));
+    self set_move_speed_scale(0.5 / (1 + b_upgraded));
     self setBurn(2.5);
     wait 2.5;
-    self setMoveSpeedScale(1);
+    self set_move_speed_scale(1);
 }
 
 acquire_vortex_and_watch_damage(w_weapon)

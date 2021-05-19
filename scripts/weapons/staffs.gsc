@@ -7,6 +7,103 @@ monitor_staffs_tomb()
     self thread watch_staff_air_impact();
 }
 
+tomb_staff_init()
+{
+	/*
+	if(!isdefined(level.a_elemental_staffs))
+	{
+		return;
+	}
+	thread tomb_staffs_fix_persistence();
+	array::thread_all(level.a_elemental_staffs, serious::kill_s_staff_weapon_tracker);
+	*/
+}
+
+tomb_staffs_fix_persistence()
+{
+	/*
+	if(!isdefined(level.zombie_craftable_persistent_weapon))
+	{
+		return;
+	}
+	level._zombie_craftable_persistent_weapon = level.zombie_craftable_persistent_weapon;
+	level.zombie_craftable_persistent_weapon = serious::tomb_staff_notrack;
+	*/
+}
+
+kill_s_staff_weapon_tracker()
+{
+	/*
+	while(true)
+	{
+		util::wait_network_frame();
+		if(!isdefined(self.charger) || !isdefined(self.charger.is_charged))
+		{
+			continue;
+		}
+		if(!self.charger.is_charged)
+		{
+			continue;
+		}
+		break;
+	}
+	self thread no_track_staff_weapon_respawn();
+	*/
+}
+
+tomb_staff_notrack(player)
+{
+	/*
+	b_result = false;
+	if(isdefined(level._zombie_craftable_persistent_weapon))
+	{
+		b_result = [[ level._zombie_craftable_persistent_weapon ]](player);
+	}
+	if(!isdefined(self.stub.gm_fix))
+	{
+		self.stub.gm_fix = true;
+		self.stub thread no_track_staff_weapon_respawn();
+	}
+	return b_result;
+	*/
+}
+
+tomb_revive_staff_monitor()
+{
+	self notify(#"hash_38af9e8e");
+	self endon(#"hash_38af9e8e");
+	self endon(#"hash_75edd128");
+	self endon("disconnect");
+	self endon("bled_out");
+	while(true)
+	{
+		ammo = self getammocount(level.var_2b2f83e5);
+		self clientfield::set_player_uimodel("hudItems.dpadLeftAmmo", ammo);
+		wait(0.05);
+	}
+}
+
+no_track_staff_weapon_respawn()
+{
+	/*
+	self endon("death");
+	self notify("no_track_staff_weapon_respawn");
+	self endon("no_track_staff_weapon_respawn");
+	while(true)
+	{
+		str_name = "craftable_" + self.base_weaponname + "_zm";
+		model = getent(str_name, "targetname");
+		model show();
+		level flag::set(self.base_weaponname + "_zm_enabled");
+
+		self notify("kill_track_staff_weapon_respawn");
+		wait 0.25;
+		self waittill("kill_track_staff_weapon_respawn");
+		wait 0.25;
+	}
+	*/
+}
+
 monitor_fire_tomb()
 {
     self endon("disconnect");
@@ -134,6 +231,12 @@ monitor_lightning_tomb()
 	while(1)
 	{
 		self waittill("missile_fire", e_projectile, str_weapon);
+		if(str_weapon.name == "staff_lightning_upgraded" || str_weapon.name == "staff_lightning")
+		{
+			self.g_lstaff_nerf_ct = int(min(self.g_lstaff_nerf_ct + 1, STAFF_LIGHTNING_NERF_NUMSHOTS));
+			self.g_lstaff_nerf_pct = STAFF_LIGHTNING_NERF_PCT_STEP * self.g_lstaff_nerf_ct;
+			self thread lightning_tomb_reset_nerf();
+		}
 		if(str_weapon.name == "staff_lightning_upgraded2" || str_weapon.name == "staff_lightning_upgraded3")
 		{
 			wait .025;
@@ -150,6 +253,24 @@ monitor_lightning_tomb()
             ent_lightning_ball thread lightning_ball_pvp(self);
 		}
 	}
+}
+
+lightning_tomb_reset_nerf()
+{
+	self endon("disconnect");
+	self endon("bled_out");
+	self notify("lightning_tomb_reset_nerf");
+	self endon("lightning_tomb_reset_nerf");
+	wait STAFF_LIGHTNING_NERF_REGEN_DELAY;
+	self.g_lstaff_nerf_ct = 0;
+	self.g_lstaff_nerf_pct = 0;
+}
+
+get_effective_ls_mp()
+{
+	if(!isdefined(self.g_lstaff_nerf_pct))
+		return 1.0;
+	return 1.0 - max(min(1.0, self.g_lstaff_nerf_pct), 0);
 }
 
 lightning_ball_pvp(e_attacker)
@@ -264,10 +385,10 @@ staff_lightning_stun_player()
 
     self thread playFXTimedOnTag(level._effect["tesla_shock"], "J_SpineUpper", 1);
 	if(self.sessionstate != "playing" || self.health <= 0) return;
-    self setMoveSpeedScale(.5);
+    self set_move_speed_scale(.5);
     if(!self util::is_bot()) self SetElectrified(1);
     wait 1;
-    self setMoveSpeedScale(1);
+    self set_move_speed_scale(1);
 }
 
 watch_staff_water_impact()
@@ -362,13 +483,13 @@ ice_affect_zombie(str_weapon = getweapon("staff_water"), e_player, n_mod = 1)
 		n_damage *= 3;
 	}
 	n_speed = 0.07;
-	self setMoveSpeedScale(n_speed);
+	self set_move_speed_scale(n_speed);
 	for(i = 0; i < 20; i++)
 	{
 		self dodamage(int(n_damage), self.origin, e_player, undefined, "none", "MOD_UNKNOWN", 0, level.weaponnone);
 		wait(0.1);
 	}
-    self setMoveSpeedScale(1);
+    self set_move_speed_scale(1);
 }
 
 watch_staff_air_impact()

@@ -20,7 +20,8 @@ init_wager_totems()
     add_wager_modifier(3, "forfeit the ability to use grenades, tacticals, and specialist weapons",                                     serious::wager_weapon_types);
     add_wager_modifier(4, "inflict no melee damage to enemy players",                                                                   serious::wager_pvp_melee_damage);
     add_wager_modifier(4, "forfeit the ability to grab powerups",                                                                       serious::wager_powerups);
-    add_wager_modifier(4, "take 100 points of damage per second while sprinting",                                                       serious::wager_sprinting);
+    // add_wager_modifier(4, "take 100 points of damage per second while sprinting",                                                       serious::wager_sprinting);
+    add_wager_modifier(4, "forfeit the ability to slide",                                                                               serious::wager_sliding);
     add_wager_modifier(5, "significantly increase the amount of points required for you to win.\nYou will take double damage from players while above the normal winning score.",   serious::wager_win);
 
     // selects random modifiers for this game
@@ -685,4 +686,19 @@ wager_make_icon()
     tag2 enableLinkTo();
     tag2 linkto(tag, "tag_origin", (-2.5,-4,-1), (0,180,0));
     playFXOnTag(level._effect["eye_glow"], tag2, "tag_origin");
+}
+
+wager_sliding()
+{
+    self endon("disconnect");
+    while(true)
+    {
+        if(self.sessionstate != "playing")
+        {
+            wait 0.25;
+            continue;
+        }
+        self AllowSlide(false);
+        wait 1;
+    }
 }

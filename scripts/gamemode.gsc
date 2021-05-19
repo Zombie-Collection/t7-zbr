@@ -72,7 +72,35 @@ setup_weapons()
         level._hero_weapons[getweapon("hero_gravityspikes_melee")].wield_fn = ::wield_gravityspikes;
         level._hero_weapons[getweapon("hero_gravityspikes_melee")].unwield_fn = ::unwield_gravityspikes;
     }
+    if(isdefined(level.var_32bc7eba))
+    {
+        tomb_staff_init();
+    }
+    custom_aat_fix();
     custom_weapon_init();
+}
+
+// will attempt to repair aat functionality for maps who disable it through certain means.
+custom_aat_fix()
+{
+    keys = getarraykeys(level.aat_exemptions);
+    foreach(weapon in keys)
+    {
+        switch(true)
+        {
+            case zm_utility::is_lethal_grenade(weapon):
+            case zm_utility::is_tactical_grenade(weapon):
+            case zm_utility::is_placeable_mine(weapon):
+            case zm_utility::is_offhand_weapon(weapon):
+            case zm_utility::is_melee_weapon(weapon):
+            case zm_utility::is_hero_weapon(weapon):
+            break;
+
+            default:
+                arrayremoveindex(level.aat_exemptions, weapon, true);
+            break;
+        }
+    }
 }
 
 apply_lighting(setting = 0)
@@ -97,6 +125,7 @@ setup_environment()
     level.var_1821d194 = true; // zm_island anti-spider fix
     level.drawfriend = false;
     level.custom_firesale_box_leave = false;
+    level.zombiemode_reusing_pack_a_punch = true; // attempt to circumvent anti-double pap on custom maps
     #endregion
 
     #region Scalar
@@ -205,6 +234,7 @@ apply_bgb_changes()
     level.bgb["zm_bgb_idle_eyes"].activation_func = serious::bgb_idle_eyes_activate;
     level.bgb["zm_bgb_mind_blown"].activation_func = serious::bgb_mind_blown_activate;
     level.bgb["zm_bgb_profit_sharing"].var_e25efdfd = serious::bgb_profit_sharing_override;
+    level.bgb["zm_bgb_anywhere_but_here"].activation_func = serious::anywhere_but_here_activation;
     level.bgb["zm_bgb_head_drama"].limit = 1;
     level.bgb["zm_bgb_near_death_experience"].limit = 1; // this is too strong to last several rounds
 
@@ -222,7 +252,6 @@ apply_bgb_changes()
         machine.unitrigger_stub.prompt_and_visibility_func = serious::bgb_visibility_override;
         machine thread bgb_stealable_trigger_check();
     }
-
     setDvar("scr_firstGumFree", false);
 }
 
@@ -306,6 +335,11 @@ hostdev()
     if(IS_DEBUG && DEBUG_WAGER_FX)
     {
         self.wager_tier = DEBUG_WAGER_FX;
+    }
+
+    if(IS_DEBUG && DEV_FORGEMODE)
+    {
+        self thread dev_bind();
     }
 
     if(self util::is_bot()) return;
@@ -608,6 +642,8 @@ apply_spawn_cleanup()
     {
         self thread gm_spawn_protect(5);
     }
+
+    self setclientuivisibilityflag("hud_visible", true);
 }
 
 gm_spawn_protect(time)
@@ -653,6 +689,9 @@ apply_pre_delay_spawn_variables()
     self.is_on_fire = false; // fix firestaff burning
     self.var_3f6ea790 = false; // fix mirg2000 aoe
     self.shrinked = false; // fix shrink ray
+
+    self.g_lstaff_nerf_pct = 0.0; // reset lightning staff nerf pct
+    self.g_lstaff_nerf_ct = 0; // reset lightning staff shot count
 }
 
 handle_safe_respawn()
@@ -924,7 +963,10 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
     if(self laststand::player_is_in_laststand()) return 0;
     
     result = self [[ level._overridePlayerDamage ]](eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath, weapon, vPoint, vDir, sHitLoc, psOffsetTime);
+    n_result_cpy = result;
+
     shrink_multiplier = 1.0f;
+    is_explosive = (smeansofdeath == "MOD_PROJECTILE_SPLASH" || smeansofdeath == "MOD_GRENADE" || smeansofdeath == "MOD_GRENADE_SPLASH" || smeansofdeath == "MOD_EXPLOSIVE");
 
     if(isdefined(self.is_zombie) && self.is_zombie) return result;
 
@@ -935,7 +977,7 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
     {
         if(!isdefined(attacker.shrink_damage_refract)) return 0; // shrink ray damage must come from a refraction call
         attacker = attacker.attacker;
-        if(!(smeansofdeath == "MOD_PROJECTILE_SPLASH" || smeansofdeath == "MOD_GRENADE" || smeansofdeath == "MOD_GRENADE_SPLASH" || smeansofdeath == "MOD_EXPLOSIVE"))
+        if(!is_explosive)
         {
             shrink_multiplier = SHRINK_RAY_DAMAGE_MULT;
         }
@@ -955,7 +997,7 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
     is_bb = isdefined(level.placeable_mines) && isinarray(level.placeable_mines, weapon);
     is_wg = weapon_is_wg(weapon);
 
-    if(isplayer(attacker) && attacker != self && (is_ww || is_bb || is_wg)) result = iDamage;
+    if(isplayer(attacker) && attacker != self && ((is_ww && smeansofdeath != "MOD_MELEE") || is_bb || is_wg)) result = iDamage;
     if(isdefined(level.var_25ef5fab) && level.var_25ef5fab == weapon) result = iDamage; // beacon fix
 
     if(isdefined(self.staff_succ) && smeansofdeath == "MOD_FALLING" && self.staff_succ) 
@@ -1033,7 +1075,7 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
 
     if(isdefined(attacker.beastmode) && attacker.beastmode) return 0;
 
-    if(smeansofdeath == "MOD_PROJECTILE_SPLASH" || smeansofdeath == "MOD_GRENADE" || smeansofdeath == "MOD_GRENADE_SPLASH" || smeansofdeath == "MOD_EXPLOSIVE")
+    if(is_explosive)
     {
         if((!isdefined(level.var_30611368) || weapon != level.var_30611368) && !issubstr(weapon.name, "raygun"))
         {
@@ -1151,7 +1193,7 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
         if(isdefined(sMeansOfDeath) && sMeansOfDeath != "MOD_UNKNOWN")
             result += result * level.player_weapon_boost;
         
-        result = int(self GM_AdjustWeaponDamage(weapon, result, sMeansOfDeath, attacker) * shrink_multiplier);
+        result = int(self GM_AdjustWeaponDamage(weapon, result, n_result_cpy, idamage, sMeansOfDeath, attacker) * shrink_multiplier);
 
         if(isdefined(level.zombie_vars[attacker.team]["zombie_insta_kill"]) && level.zombie_vars[attacker.team]["zombie_insta_kill"])
         {
@@ -1319,7 +1361,7 @@ is_upgraded_tomb_staff(weapon)
 }
 
 
-GM_AdjustWeaponDamage(weapon, result, sMeansOfDeath = "MOD_NONE", attacker)
+GM_AdjustWeaponDamage(weapon, result, n_mod_dmg, iDamage, sMeansOfDeath = "MOD_NONE", attacker)
 {
     if(!isdefined(weapon) || !isdefined(weapon.rootweapon))
         return result;
@@ -1551,12 +1593,19 @@ GM_AdjustWeaponDamage(weapon, result, sMeansOfDeath = "MOD_NONE", attacker)
         default:
 
             if(!is_tomb_staff(weapon))
-                return gm_adjust_custom_weapon(weapon, result, sMeansOfDeath, attacker);
-            
-            if(!is_upgraded_tomb_staff(weapon))
-                return level.round_number * 1000;
+                return gm_adjust_custom_weapon(weapon, result, n_mod_dmg, iDamage, sMeansOfDeath, attacker);
 
-            return level.round_number * 1500;
+            n_result = level.round_number * 1500;
+
+            if(!is_upgraded_tomb_staff(weapon))
+                n_result = level.round_number * 1000;
+
+            if(weapon.rootweapon.name == "staff_lightning_upgraded" || weapon.rootweapon.name == "staff_lightning")
+            {
+                n_result = int(attacker get_effective_ls_mp() * n_result);
+            }
+
+        return n_result;
     }
 }
 
@@ -1679,6 +1728,26 @@ Check_GMObjectiveState()
 
         if(self.gm_objective_state)
             self thread GM_BeginCountdown();
+    }
+}
+
+update_gm_speed_boost(ignore_entity, n_value = 1)
+{
+    b_any_objective = false;
+    foreach(player in level.players)
+    {
+        if(isdefined(ignore_entity) && player == ignore_entity) continue;
+        if(isdefined(player.gm_objective_state) && player.gm_objective_state)
+        {
+            b_any_objective = true;
+        }
+    }
+
+    b_use_speed_boost = b_any_objective && !(isdefined(self.gm_objective_state) && self.gm_objective_state);
+    b_boosted = self getmovespeedscale() >= GM_MOVESPEED_BOOSTER_MP;
+    if(b_use_speed_boost != b_boosted)
+    {
+        self setMoveSpeedScale(b_use_speed_boost ? GM_MOVESPEED_BOOSTER_MP : n_value);
     }
 }
 
@@ -1826,6 +1895,7 @@ Event_RoundNext()
     zm_cosmodrome_fix();
     zm_dogs_fix();
     thread zm_mechz_roundNext();
+    custom_round_next();
 }
 
 Event_ZombieInitDone()
@@ -2085,6 +2155,16 @@ GiveCatalystLoadout()
             default:
                 if(num_given < zm_utility::get_player_weapon_limit(self))
                 {
+                    if(is_upgraded_tomb_staff(weapon))
+                    {
+                        if(isdefined(level.var_2b2f83e5))
+                        {
+                            self giveweapon(level.var_2b2f83e5);
+                            self setactionslot(3, "weapon", level.var_2b2f83e5);
+                            self clientfield::set_player_uimodel("hudItems.showDpadLeft_Staff", 1);
+                            self thread tomb_revive_staff_monitor();
+                        }
+                    }
                     acvi = self GetBuildKitAttachmentCosmeticVariantIndexes(weapon, zm_weapons::is_weapon_upgraded(weapon));
                     self GiveWeapon(weapon, options, acvi);
                     self switchtoweaponimmediate(weapon);
@@ -2120,7 +2200,7 @@ PlayerDownedCallback(eInflictor, eAttacker, iDamage, sMeansOfDeath, weapon, vDir
         {
             self thread zm::wait_and_revive();
             self unlink();
-            self thread zm_bgb_anywhere_but_here::activation();
+            self thread anywhere_but_here_activation();
         }
     }
     else
@@ -2275,6 +2355,7 @@ GM_BeginCountdown()
         foreach(player in level.players)
         {
             player UpdateGMProgress(self);
+            player update_gm_speed_boost();
         }
 
         if(self.gm_objective_timesurvived >= OBJECTIVE_WIN_TIME)
@@ -2284,6 +2365,7 @@ GM_BeginCountdown()
     foreach(player in level.players)
     {
         player UpdateGMProgress(self);
+        player update_gm_speed_boost();
     }
 
     KillHeadIcons(self);
@@ -2313,8 +2395,8 @@ wait_and_revive_player(text) // players killed right when objective is completed
     {
         self [[ level.spawnplayer ]]();
         self thread wait_and_return_weapon();
-        if(isdefined(text)) self iPrintLnBold(text);
     }
+    if(isdefined(text)) self iPrintLnBold(text);
 }
 
 CleanupMusicCheck()
@@ -2673,6 +2755,8 @@ on_player_disconnect()
     foreach(player in level.players)
     {
         if(player == self) continue;
+        player update_gm_speed_boost(self);
+
         if(!isdefined(player._bars)) continue;
         bar = player._bars[ent];
         if(!isdefined(bar)) continue;

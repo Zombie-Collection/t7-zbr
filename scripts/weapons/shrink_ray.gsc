@@ -102,7 +102,7 @@ shrink_me(b_upgraded, e_attacker)
         self.shrink_trigger thread watch_shrink_damage(self);
         self disableWeapons();
         self thread watch_when_kicked();
-        self setMoveSpeedScale(2.5);
+        self set_move_speed_scale(2.5);
         playfxontag(level._effect["monkey_glow"], self.shrink_model, "tag_origin_animate");
     }
     
@@ -125,7 +125,7 @@ shrink_me(b_upgraded, e_attacker)
         playfx(level._effect["teleport_splash"], self.origin);
 	    playfx(level._effect["teleport_aoe"], self.origin);
     }
-    self setMoveSpeedScale(1);
+    self set_move_speed_scale(1);
     self enableWeapons();
     self notify("unshrink");
 }

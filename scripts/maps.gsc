@@ -14,10 +14,19 @@
 
 initmaps()
 {
-    if(isdefined(level.gm_init_maps) && level.gm_init_maps)
+    gm_maps_val = isdefined(level.gm_init_maps) && level.gm_init_maps;
+
+    if(gm_maps_val)
+    {
+        while(!isdefined(level.gm_locked) || level.gm_locked) // this lock prevents async spawn operations from failing
+        {
+            wait 0.025;
+        }
         return;
+    }
 
     level.gm_init_maps = true;
+    level.gm_locked = true;
 
     foreach(k, v in level.zones)
     {
@@ -145,20 +154,21 @@ initmaps()
             level.gm_spawns[level.gm_spawns.size] = "zone_nml_farm";
             level.gm_spawns[level.gm_spawns.size] = "zone_nml_11";
 
-            level.gm_blacklisted[level.gm_blacklisted.size] = "zone_chamber_2";
-            level.gm_blacklisted[level.gm_blacklisted.size] = "zone_chamber_8";
-            level.gm_blacklisted[level.gm_blacklisted.size] = "zone_chamber_6";
-            level.gm_blacklisted[level.gm_blacklisted.size] = "zone_chamber_0";
+            for(i = 0; i < 9; i++)
+            {
+                level.gm_blacklisted[level.gm_blacklisted.size] = "zone_chamber_" + i;
+            }
             thread zm_tomb_pap();
         break;
 
         default:
             custom_maps();
-
-            if(level.gm_spawns.size < 1)
-                return;
             break;
     }
+
+    level.gm_locked = false;
+    if(level.gm_spawns.size < 1)
+        return;
 
     level.gm_spawns = array::randomize(level.gm_spawns);
     level.spawn_index = 0;
@@ -574,16 +584,8 @@ zm_tomb_pap()
     level.mechz_min_round_fq = 5;
 	level.mechz_max_round_fq = 6;
     level.a_e_slow_areas = [];
-
-    setdvar("zombie_unlock_all", 1);
-    zombie_doors = GetEntArray("zombie_debris", "targetname");
-    foreach(door in zombie_doors)
-    {
-        door notify("trigger", level.players[0], 1);
-    }
-    wait 0.1;
-    setdvar("zombie_unlock_all", 0);
-
+    unlock_all_debris();
+    
     // power the generators permanently
     level.zone_capture.spawn_func_recapture_zombie = ::killzomb_tomb;
     level.total_capture_zones = 6;
@@ -1258,6 +1260,7 @@ zm_mechz_roundNext()
 // Algorithm is just a simple furthest neightbor implementation. Far from perfect, but will at least hopefully allow support for custom maps.
 gm_generate_spawns()
 {
+    /*
     zones = [];
     foreach(k, v in level.zones)
     {
@@ -1279,7 +1282,7 @@ gm_generate_spawns()
             }
         }
     }
-
+    */
     /*
     if(level.gm_spawns.size < 4)
     {
@@ -1452,6 +1455,7 @@ gm_generate_poi_spawns()
     s_respawner = spawnStruct();
     s_respawner.targetname = "player_respawn_point";
     s_respawner.target = "poi_spawn_point";
+    s_respawner.origin = (0,0,0);
     array::add(level.struct_class_names["targetname"]["player_respawn_point"], s_respawner, false);
 }
 
@@ -1683,7 +1687,7 @@ is_point_in_bad_zone(v_point)
     if(!single_check_enough_zones()) return false;
     foreach(target_zone in level.gm_blacklisted)
     {
-        if(is_point_inside_zone(v_point, target_zone))
+        if(is_point_inside_zone(v_point, level.zones[target_zone])) // thats annoying. bug with blacklisting cause i passed str_zone instead of level.zones[str_zone]. :lemonsadge
         {
             return true;
         }

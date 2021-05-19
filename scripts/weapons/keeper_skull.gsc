@@ -89,11 +89,11 @@ keeper_skull_damage(e_player)
         e_player thread playFXTimedOnTag(level._effect["tesla_shock"], "j_head", 0.25);
         self skull_consume_hero_power(5);
         e_player dodamage(int(SKULL_DMG_PER_TICK * level.round_number), e_player.origin, self, undefined, "none", "MOD_UNKNOWN", 0, level.weaponnone);
-        e_player setMoveSpeedScale(0.75);
+        e_player set_move_speed_scale(0.75);
         if(!e_player util::is_bot()) e_player SetElectrified(0.25);
 	}
 	e_player.var_20b8c74a = 0;
-    e_player setMoveSpeedScale(1.0);
+    e_player set_move_speed_scale(1.0);
 }
 
 skull_consume_hero_power(n_power_consumed)
@@ -171,7 +171,7 @@ player_mesmerize_refresh(e_attacker)
         self disableWeapons();
         self disableusability();
         self thread playFXTimedOnTag(level._effect["tesla_shock"], "j_head", 0.25);
-        self setMoveSpeedScale(0.25);
+        self set_move_speed_scale(0.25);
         if(!self util::is_bot()) self SetElectrified(0.25);
         e_attacker zm_score::add_to_player_score(SKULL_MESMERIZE_SCORE_PER_TICK, 1, "gm_zbr_admin");
         e_attacker skull_consume_hero_power(2);
@@ -179,7 +179,7 @@ player_mesmerize_refresh(e_attacker)
     }
     self enableWeapons();
     self enableusability();
-    self setMoveSpeedScale(1);
+    self set_move_speed_scale(1);
 }
 
 is_within_skull_range(e_player)
