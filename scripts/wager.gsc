@@ -1,5 +1,6 @@
 #define WAGER_MIN_LEVEL = 1;
-#define WAGER_MAX_LEVEL = 5;
+#define WAGER_MAX_LEVEL = 6;
+#define WAGER_GM1_GG_TIME = 10;
 
 init_wager_totems()
 {
@@ -8,21 +9,26 @@ init_wager_totems()
     add_wager_tier(3, "Expert I",       4.0);
     add_wager_tier(4, "Expert II",      5.0);
     add_wager_tier(5, "Master",         10.0);
+    add_wager_tier(6, "Grandmaster I",  10.0);
 
-    add_wager_modifier(1, "earn fewer points from zombies",                                                                             serious::wager_zm_points);
-    add_wager_modifier(1, "take more damage from zombies",                                                                              serious::wager_zm_incoming_damage);
-    add_wager_modifier(1, "deal less damage to zombies",                                                                                serious::wager_zm_outgoing_damage);
-    add_wager_modifier(2, "earn fewer points from enemy players",                                                                       serious::wager_pvp_points);
-    add_wager_modifier(2, "take more damage from enemy players",                                                                        serious::wager_pvp_incoming_damage);
-    add_wager_modifier(2, "deal less damage to enemy players",                                                                          serious::wager_pvp_outgoing_damage);
-    add_wager_modifier(3, "forfeit the ability to purchase gobblegums",                                                                 serious::wager_bgb_pack);
-    add_wager_modifier(3, "forfeit a weapon slot (keep current weapon)",                                                                serious::wager_weapon_slot);
-    add_wager_modifier(3, "forfeit the ability to use grenades, tacticals, and specialist weapons",                                     serious::wager_weapon_types);
-    add_wager_modifier(4, "inflict no melee damage to enemy players",                                                                   serious::wager_pvp_melee_damage);
-    add_wager_modifier(4, "forfeit the ability to grab powerups",                                                                       serious::wager_powerups);
-    // add_wager_modifier(4, "take 100 points of damage per second while sprinting",                                                       serious::wager_sprinting);
-    add_wager_modifier(4, "forfeit the ability to slide",                                                                               serious::wager_sliding);
+    add_wager_modifier(1, "earn fewer points from zombies",                                                                                                                         serious::wager_zm_points);
+    add_wager_modifier(1, "take more damage from zombies",                                                                                                                          serious::wager_zm_incoming_damage);
+    add_wager_modifier(1, "deal less damage to zombies",                                                                                                                            serious::wager_zm_outgoing_damage);
+    add_wager_modifier(2, "earn fewer points from enemy players",                                                                                                                   serious::wager_pvp_points);
+    add_wager_modifier(2, "take more damage from enemy players",                                                                                                                    serious::wager_pvp_incoming_damage);
+    add_wager_modifier(2, "deal less damage to enemy players",                                                                                                                      serious::wager_pvp_outgoing_damage);
+    add_wager_modifier(3, "forfeit the ability to purchase gobblegums",                                                                                                             serious::wager_bgb_pack,                serious::gums_present);
+    add_wager_modifier(3, "forfeit a weapon slot (keep current weapon)",                                                                                                            serious::wager_weapon_slot);
+    add_wager_modifier(3, "forfeit the ability to use grenades, tacticals, and specialist weapons",                                                                                 serious::wager_weapon_types);
+    add_wager_modifier(4, "inflict no melee damage to enemy players",                                                                                                               serious::wager_pvp_melee_damage);
+    add_wager_modifier(4, "forfeit the ability to grab powerups",                                                                                                                   serious::wager_powerups);
+    // add_wager_modifier(4, "take 100 points of damage per second while sprinting",                                                                                                serious::wager_sprinting);
+    add_wager_modifier(4, "forfeit the ability to slide",                                                                                                                           serious::wager_sliding);
     add_wager_modifier(5, "significantly increase the amount of points required for you to win.\nYou will take double damage from players while above the normal winning score.",   serious::wager_win);
+    add_wager_modifier(6, "be forced to take a copy of any weapon rolled from the box",                                                                                             serious::wager_box_options,             serious::boxes_present,     "Weapons consume ammo half as quickly. Gain an additional Elo transfer bonus.");
+    add_wager_modifier(6, "acquire a new weapon after each kill.\nLimited to once per " + WAGER_GM1_GG_TIME + " seconds",                                                           serious::wager_gun_game,                undefined,                  "Weapons consume ammo half as quickly. Gain an additional Elo transfer bonus.");
+    add_wager_modifier(6, "acquire a new set of weapons each round",                                                                                                                serious::wager_loadout_rounds,          undefined,                  "Weapons consume ammo half as quickly. Gain an additional Elo transfer bonus.");
+
 
     // selects random modifiers for this game
     for(i = WAGER_MIN_LEVEL; i <= WAGER_MAX_LEVEL; i++)
@@ -53,8 +59,12 @@ get_wager_tier(tier = 0)
     return level.wager_tiers[tier];
 }
 
-add_wager_modifier(tier, text, func_accepted)
+add_wager_modifier(tier, text, func_accepted, func_validate, override_bonus)
 {
+    if(isdefined(func_validate) && !(level [[func_validate]]()))
+    {
+        return;
+    }
     if(!isdefined(level.wager_modifiers))
     {
         level.wager_modifiers = [];
@@ -68,6 +78,7 @@ add_wager_modifier(tier, text, func_accepted)
     s_modifier.tier = tier;
     s_modifier.text = text;
     s_modifier.func_accepted = func_accepted;
+    s_modifier.override_bonus = override_bonus;
     a_modifiers[a_modifiers.size] = s_modifier;
     return s_modifier;
 }
@@ -81,7 +92,14 @@ make_wager_text(tier = 1)
         return "";
     }
     s_text = "[^2" + s_tier.text + "^7] Hold ^3&&1 ^7to " + s_tier.modifier.text;
-    s_text += "\nGrants more xp and vials. Makes elo harder to lose, and easier to gain.";
+    if(isdefined(s_tier.modifier.override_bonus))
+    {
+        s_text += "\n" + s_tier.modifier.override_bonus;
+    }
+    else
+    {
+        s_text += "\nGrants more xp and vials. Makes elo harder to lose, and easier to gain.";
+    }
     return s_text;
 }
 
@@ -332,8 +350,8 @@ wager_activate_visionset()
 
 wager_zm_points()
 {
-    self.wager_zm_points_mod = 0.75;
-    self.wager_zm_points_drop = 4;
+    self.wager_zm_points_mod = 0.85;
+    self.wager_zm_points_drop = 5;
 }
 
 wager_zm_outgoing_damage()
@@ -446,6 +464,11 @@ do_wager_character_effects()
         tier = self.wager_tier;
         if(isdefined(tier))
         {
+            if(tier >= 6)
+            {
+                self thread wager_fx_gm1();
+                self thread wager_gm1_rewards();
+            }
             if(tier >= 5)
             {
                 self thread wager_fx_master();
@@ -623,6 +646,80 @@ wager_fx_challenger_i()
     playFXOnTag(level._effect["eye_glow"], self.wager_fx_challenger_i, "tag_origin");
 }
 
+#define GOLD_INDEX = 15;
+wager_fx_gm1()
+{
+    self endon("bled_out");
+    self endon("disconnect");
+    self endon("spawned_player");
+    self.wager_fx_gm1 = true;
+    list_tracked_inventory = [];
+    foreach(weapon in self getWeaponsListPrimaries())
+    {
+        if(isdefined(weapon))
+        {
+            self wager_force_camo(weapon, GOLD_INDEX, weapon == (self getCurrentWeapon()));
+        }
+    }
+    list_tracked_inventory = arraycopy(self getWeaponsListPrimaries());
+    while(true)
+    {
+        // saves us from death machine bricks and stuff
+        self bgb::function_378bff5d();
+        self zm_bgb_disorderly_combat::function_8a5ef15f();
+        foreach(weapon in self getWeaponsListPrimaries())
+        {
+            if(!isinarray(list_tracked_inventory, weapon))
+            {
+                self wager_force_camo(weapon, GOLD_INDEX, weapon == (self getCurrentWeapon()));
+            }
+        }
+        list_tracked_inventory = arraycopy(self getWeaponsListPrimaries());
+        self waittill("weapon_change");
+    }
+}
+
+wager_force_camo(weapon, camo = 0, swap = true)
+{
+    if(!isdefined(weapon)) return;
+    weapon_options = self CalcWeaponOptions(camo, 0, 0);
+    acvi = self GetBuildKitAttachmentCosmeticVariantIndexes(weapon, self zm_weapons::is_weapon_upgraded(weapon));
+    ammo_clip = self GetWeaponAmmoClip(weapon);
+    ammo_stock = self GetWeaponAmmoStock(weapon);
+    self takeweapon(weapon, 1);
+    self GiveWeapon(weapon, weapon_options, acvi);
+    if(swap)
+    {
+        self switchtoweaponimmediate(weapon);
+    }
+    self SetWeaponAmmoClip(weapon, ammo_clip);
+    self SetWeaponAmmoStock(weapon, ammo_stock);
+}
+
+wager_gm1_rewards()
+{
+    self endon("bled_out");
+    self endon("disconnect");
+    self endon("spawned_player");
+    save_bullet_array = [];
+    self setperk("specialty_stalker");
+    self.wager_gm1_rewards = true;
+    while(true)
+    {
+        self waittill("weapon_fired", weapon);
+        if(!isdefined(weapon)) continue;
+        if(!isdefined(save_bullet_array[weapon]))
+        {
+            save_bullet_array[weapon] = false;
+        }
+        save_bullet_array[weapon] = !save_bullet_array[weapon];
+        if(save_bullet_array[weapon])
+        {
+            self SetWeaponAmmoClip(weapon, self GetWeaponAmmoClip(weapon) + 1);
+        }
+    }
+}
+
 wager_make_weapon(location, angles, weapon, options, owner)
 {
     mdl = spawn("script_model", location);
@@ -701,4 +798,242 @@ wager_sliding()
         self AllowSlide(false);
         wait 1;
     }
+}
+
+wager_box_options()
+{
+    self.wager_box_options = true;
+}
+
+boxes_present()
+{
+    return isdefined(level.chests) && level.chests.size;
+}
+
+wager_func_magicbox_weapon_spawned(box_weapon)
+{
+    foreach(player in level.players)
+    {
+        if(player.sessionstate != "playing")
+        {
+            continue;
+        }
+        if(!isdefined(player.wager_box_options) || !player.wager_box_options)
+        {
+            continue;
+        }
+        player thread wager_transfer_weapon_give(box_weapon);
+    }
+    if(isdefined(level._func_magicbox_weapon_spawned))
+    {
+        self [[level._func_magicbox_weapon_spawned]](box_weapon);
+    }
+}
+
+// awards a player the weapon provided given the same quality and AAT of their current weapon.
+wager_transfer_weapon_give(weapon)
+{
+    self endon("disconnect");
+    self endon("bled_out");
+    if(!isdefined(weapon) || weapon == level.weaponnone || (isdefined(level.zombie_powerup_weapon["minigun"]) && level.zombie_powerup_weapon["minigun"] == weapon)) return;
+    if(!zm_utility::is_player_valid(self)) return;
+
+    self bgb::function_378bff5d();
+    self zm_bgb_disorderly_combat::function_8a5ef15f();
+    if(!self zm_magicbox::can_buy_weapon()) return;
+    while(self isMeleeing())
+    {
+        wait 0.25;
+    }
+
+    cw = zm_weapons::get_nonalternate_weapon(self getCurrentWeapon());
+    if(zm_weapons::is_weapon_upgraded(cw))
+    {
+        weapon_ug = zm_weapons::get_upgrade_weapon(weapon);
+        if(isdefined(weapon_ug))
+        {
+            weapon = weapon_ug;
+        }
+    }
+
+    // swap aat from old weapon to new weapon
+    if(isdefined(cw) && isdefined(self.AAT[cw]))
+    {
+        current_aat = self.AAT[cw];
+        self.AAT[cw] = undefined;
+    }
+
+    switch(true)
+    {
+        case zm_utility::is_hero_weapon(weapon):
+            self zm_weapons::weapon_give(weapon, 0, 0, 1, 0);
+            self zm_utility::set_player_hero_weapon(weapon);
+        break;
+        case zm_utility::is_melee_weapon(weapon):
+        case zm_utility::is_lethal_grenade(weapon):
+        case zm_utility::is_tactical_grenade(weapon):
+        case zm_utility::is_placeable_mine(weapon):
+        case zm_utility::is_offhand_weapon(weapon):
+            self zm_weapons::weapon_give(weapon, 0, 0, 1, 0);
+        break;
+        default:
+            primaryweapons = self getweaponslistprimaries();
+            weapon_limit = zm_utility::get_player_weapon_limit(self);
+            if(primaryweapons.size >= weapon_limit && !zm_utility::is_offhand_weapon(cw))
+            {
+                self takeweapon(cw);
+            }
+            weapon = self zm_weapons::give_build_kit_weapon(weapon);
+            self switchToWeapon(weapon);
+            self givestartammo(weapon);
+            wait 0.1;
+            GiveAAT(self, current_aat, false, weapon);
+        break;
+    }
+}
+
+wager_gun_game()
+{
+    self.wager_gun_game = true;
+}
+
+wager_gg_kill(eAttacker)
+{
+    if(!isdefined(eAttacker) || !isplayer(eAttacker)) return;
+    if(eAttacker.sessionstate != "playing") return;
+    if(!isdefined(eAttacker.wager_gun_game) || !eAttacker.wager_gun_game) return;
+    eAttacker thread wager_gg_swap();
+}
+
+wager_gg_swap()
+{
+    self endon("disconnect");
+    self endon("bled_out");
+
+    if(!isdefined(self.wager_gg_last))
+    {
+        self.wager_gg_last = gettime() - (WAGER_GM1_GG_TIME * 1000);
+    }
+    if((gettime() - self.wager_gg_last) < (WAGER_GM1_GG_TIME * 1000))
+    {
+        return;
+    }
+
+    cw = zm_weapons::get_nonalternate_weapon(self getCurrentWeapon());
+    switch(true)
+    {
+        case zm_utility::is_hero_weapon(cw):
+        case zm_utility::is_melee_weapon(cw):
+        case zm_utility::is_lethal_grenade(cw):
+        case zm_utility::is_tactical_grenade(cw):
+        case zm_utility::is_placeable_mine(cw):
+        case zm_utility::is_offhand_weapon(cw):
+            return;
+    }
+
+    self.wager_gg_last = gettime();
+
+    // swap aat from old weapon to new weapon
+    if(isdefined(cw) && isdefined(self.AAT[cw]))
+    {
+        current_aat = self.AAT[cw];
+        self.AAT[cw] = undefined;
+    }
+
+    is_ug = zm_weapons::is_weapon_upgraded(cw);
+    w_weapon = self wager_get_rand_weap();
+
+    if(is_ug)
+    {
+        weapon_ug = zm_weapons::get_upgrade_weapon(w_weapon);
+        if(isdefined(weapon_ug))
+        {
+            w_weapon = weapon_ug;
+        }
+    }
+
+    self bgb::function_378bff5d();
+    self zm_bgb_disorderly_combat::function_8a5ef15f();
+    while(self isMeleeing())
+    {
+        wait 0.25;
+    }
+    primaryweapons = self getweaponslistprimaries();
+    weapon_limit = zm_utility::get_player_weapon_limit(self);
+    if(primaryweapons.size >= weapon_limit && !zm_utility::is_offhand_weapon(cw))
+    {
+        self takeweapon(cw);
+    }
+    self playsoundtoplayer("zmb_bgb_disorderly_weap_switch", self);
+    w_weapon = self zm_weapons::give_build_kit_weapon(w_weapon);
+    self switchtoweaponimmediate(w_weapon);
+    self givestartammo(w_weapon);
+    wait 0.1;
+    GiveAAT(self, current_aat, false, w_weapon);
+}
+
+gums_present()
+{
+    return isdefined(level.var_5081bd63) && isdefined(level.var_5081bd63.size) && level.var_5081bd63.size;
+}
+
+wager_loadout_rounds()
+{
+    self.wager_loadout_rounds = true;
+}
+
+wager_loadout_rounds_activate()
+{
+    list = self getweaponslistprimaries();
+    aat_cache = [];
+    upgraded_cache = [];
+    weapon_limit = zm_utility::get_player_weapon_limit(self);
+    index = 0;
+    foreach(cw in list)
+    {
+        // swap aat from old weapon to new weapon
+        if(isdefined(cw) && isdefined(self.AAT[cw]))
+        {
+            upgraded_cache[index] = self.AAT[cw];
+            self.AAT[cw] = undefined;
+        }
+
+        is_ug = zm_weapons::is_weapon_upgraded(cw);
+        upgraded_cache[index] = is_ug;
+        self takeWeapon(cw);
+        index++;
+    }
+
+    for(i = 0; i < weapon_limit; i++)
+    {
+        w_weapon = self wager_get_rand_weap();
+        if(isdefined(upgraded_cache[i]) && upgraded_cache[i])
+        {
+            weapon_ug = zm_weapons::get_upgrade_weapon(w_weapon);
+            if(isdefined(weapon_ug))
+            {
+                w_weapon = weapon_ug;
+            }
+        }
+        w_weapon = self zm_weapons::give_build_kit_weapon(w_weapon);
+        self switchtoweaponimmediate(w_weapon);
+        self givestartammo(w_weapon);
+        if(isdefined(aat_cache[i]))
+        {
+            wait 0.1;
+            GiveAAT(self, aat_cache[i], false, w_weapon);
+        }
+    }        
+}
+
+wager_get_rand_weap()
+{
+    weapons = arraycopy(level.var_8fcdc919);
+    w_weapon = array::random(weapons);
+    while(self zm_weapons::has_weapon_or_upgrade(w_weapon))
+    {
+        weapons = array::pop_front(weapons, false);
+        w_weapon = array::random(weapons);
+    }
+    return w_weapon;
 }

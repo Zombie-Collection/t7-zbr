@@ -6,15 +6,78 @@ blacklist_bgb(bgb)
     level.bgb_blacklist[level.bgb_blacklist.size] = bgb;
 }
 
-remove_blacklisted_bgbs()
+fix_bgb_pack()
 {
+	if(self util::is_bot()) return;
     if(!isdefined(level.bgb_blacklist))
-        level.bgb_blacklist = [];
+    {
+		level.bgb_blacklist = [];
+	}
+	
+	// first, purge blacklisted gums from our pack
     foreach(bgb in level.bgb_blacklist)
     {
-        arrayremoveindex(self.var_e610f362, bgb, true);
-        arrayremovevalue(self.var_98ba48a2, bgb, true);
+		if(isdefined(self.var_e610f362[bgb]))
+		{
+			arrayremoveindex(self.var_e610f362, bgb, true);
+		}
+        if(isinarray(self.var_98ba48a2, bgb))
+		{
+			arrayremovevalue(self.var_98ba48a2, bgb, false);
+		}
     }
+
+	// next, purge non-consumable gums from our pack
+	bad_gums = [];
+	good_gums = [];
+	foreach(bgb in self.var_98ba48a2)
+	{
+		if(!isdefined(level.bgb[bgb]))
+		{
+			bad_gums[bad_gums.size] = bgb;
+			continue;
+		}
+		if(isinarray(good_gums, bgb)) // duplicate
+		{
+			continue;
+		}
+		good_gums[good_gums.size] = bgb;
+	}
+
+	self.var_98ba48a2 = arraycopy(good_gums);
+	foreach(bgb in bad_gums)
+	{
+		if(isdefined(self.var_e610f362[bgb]))
+		{
+			arrayremoveindex(self.var_e610f362, bgb, true);
+		}
+        if(isinarray(self.var_98ba48a2, bgb))
+		{
+			arrayremovevalue(self.var_98ba48a2, bgb, false);
+		}
+	}
+
+	// next, determine suitable fillers for our pack
+	possible_fillers = arraycopy(level.bgb);
+	bad_gums = [];
+	foreach(gum in arraycombine(good_gums, bad_gums, 0, 0))
+	{
+		arrayremoveindex(possible_fillers, gum, true);
+	}
+
+	a_keys = array::randomize(arraycopy(getArrayKeys(possible_fillers)));
+	i = 0;
+	// next, fill our pack back to 5 gums
+	while(self.var_98ba48a2.size < 5)
+	{
+		bgb = a_keys[i];
+		s_key = possible_fillers[bgb];
+		self.var_e610f362[bgb] = spawnstruct();
+		self.var_e610f362[bgb].var_e0b06b47 = 999; // quantity of this gum
+		self.var_e610f362[bgb].var_b75c376 = -999; // number of times we used it this game
+		array::add(self.var_98ba48a2, bgb, false);
+		i++;
+	}
 }
 
 free_perk_override(player)
@@ -33,7 +96,7 @@ bgb_fith_activate()
 	self playsound("zmb_bgb_fearinheadlights_start");
 	self playloopsound("zmb_bgb_fearinheadlights_loop");
 	self thread zm_bgb_fear_in_headlights::kill_fear_in_headlights();
-	self bgb::run_timer(120);
+	self bgb::run_timer(BGB_FITH_ACTIVE_TIME);
 	self notify("kill_fear_in_headlights");
 	foreach(player in level.players)
 	{
@@ -411,8 +474,6 @@ bgb_profit_sharing_override(n_points, str_awarded_by, var_1ed9bd9b)
 	return n_points;
 }
 
-//self shellshock("flashbang", self.flashduration, 0);
-
 bgb_mind_blown_activate()
 {
 	self endon("disconnect");
@@ -496,4 +557,226 @@ bgb_get_poi_spawn()
 		arrayremovevalue(possible_spawns, closest_spawns[i], false);
 	}
 	return array::random(possible_spawns);
+}
+
+bgb_armamental_disable()
+{
+	self unsetperk("specialty_fastmeleerecovery");
+	self unsetperk("specialty_fastequipmentuse");
+	self unsetperk("specialty_fasttoss");
+}
+
+bgb_crawl_space_activate()
+{
+	a_ai = getaiarray();
+	for(i = 0; i < a_ai.size; i++)
+	{
+		if(isdefined(a_ai[i]) && isalive(a_ai[i]) && isdefined(a_ai[i].archetype) && a_ai[i].archetype == "zombie" && isdefined(a_ai[i].gibdef))
+		{
+			var_5a3ad5d6 = distancesquared(self.origin, a_ai[i].origin);
+			if(var_5a3ad5d6 < 360000)
+			{
+				a_ai[i] zombie_utility::makezombiecrawler();
+			}
+		}
+	}
+
+	a_players = getplayers();
+	foreach(player in a_players)
+	{
+		if(player == self) continue;
+		if(player.sessionstate != "playing") continue;
+		if(distanceSquared(self.origin, player.origin) > 360000) continue;
+		player thread prone_for_time(BGB_CRAWL_SPACE_TIME);
+		player dodamage(1000, player.origin, self, undefined, "none", "MOD_UNKNOWN", 0, level.weaponnone);
+	}
+}
+
+prone_for_time(time = 3)
+{
+	self endon("disconnect");
+	self endon("bled_out");
+	self notify("prone_for_time");
+	self endon("prone_for_time");
+	self allowStand(0);
+	self allowCrouch(0);
+	self allowprone(1);
+	self disableusability();
+	self.gm_forceprone = true;
+	self setstance("prone");
+	wait time;
+	self.gm_forceprone = false;
+	self enableusability();
+	self allowStand(1);
+	self allowCrouch(1);
+}
+
+bgb_phoenix_up_activate()
+{
+	self endon("disconnect");
+	self endon("bled_out");
+	self endon("bgb_update");
+	self.lives = 1;
+	self waittill("player_downed");
+	while(!isdefined(self.laststandpistol) || (self getcurrentweapon() != self.laststandpistol))
+	{
+		wait(0.05);
+	}
+	if(isdefined(self.revivetrigger) && isdefined(self.revivetrigger.beingrevived))
+	{
+		self.revivetrigger setinvisibletoall();
+		self.revivetrigger.beingrevived = 0;
+	}
+	self bgb::do_one_shot_use();
+	self thread bgb::function_7d63d2eb();
+	self zm_laststand::auto_revive(self, false);
+	playsoundatposition("zmb_bgb_phoenix_activate", (0, 0, 0));
+	self.gm_override_reduce_pts = BGB_PHOENIX_SPAWN_REDUCE_POINTS;
+	self restore_earned_points();
+	self.gm_override_reduce_pts = 0;
+	self.lives = 0;
+}
+
+bgb_pup_lost_perk(perk, var_2488e46a = undefined, var_24df4040 = undefined)
+{
+	self thread bgb::revive_and_return_perk_on_bgb_activation(perk);
+	return false;
+}
+
+bgb_impatient_event()
+{
+	self endon("disconnect");
+	self endon("bgb_update");
+	self waittill("bgb_about_to_take_on_bled_out");
+	self thread bgb_impatient_respawn();
+}
+
+bgb_impatient_respawn()
+{
+	self endon("disconnect");
+	wait(1);
+	self zm::spectator_respawn_player();
+	self bgb::do_one_shot_use();
+}
+
+bgb_extra_credit_activate()
+{
+	origin = self bgb::function_c219b050();
+	self thread spawn_extra_credit(origin);
+}
+
+spawn_extra_credit(origin)
+{
+	self endon("disconnect");
+	self endon("bled_out");
+	powerup = zm_powerups::specific_powerup_drop("bonus_points_player", origin, undefined, undefined, 0.1);
+	powerup.bonus_points_powerup_override = serious::bgb_extra_credit_value;
+	wait(1);
+	if(isdefined(powerup) && (!powerup zm::in_enabled_playable_area() && !powerup zm::in_life_brush()))
+	{
+		level thread bgb::function_434235f9(powerup);
+	}
+}
+
+bgb_extra_credit_value()
+{
+	return BGB_EXTRA_CREDIT_VALUE;
+}
+
+bgb_coagulant_activate()
+{
+	self endon("disconnect");
+	self endon("bled_out");
+	self endon("bgb_update");
+	self.lives = 1;
+	self waittill("player_downed");
+	while(!isdefined(self.laststandpistol) || (self getcurrentweapon() != self.laststandpistol))
+	{
+		wait(0.05);
+	}
+	if(isdefined(self.revivetrigger) && isdefined(self.revivetrigger.beingrevived))
+	{
+		self.revivetrigger setinvisibletoall();
+		self.revivetrigger.beingrevived = 0;
+	}
+	self bgb::do_one_shot_use();
+	self zm_laststand::auto_revive(self, false);
+	self.gm_override_reduce_pts = BGB_COAGULANT_SPAWN_REDUCE_POINTS;
+	self restore_earned_points();
+	self.gm_override_reduce_pts = 0;
+	self.lives = 0;
+}
+
+bgb_arms_grace_loadout()
+{
+	self.bgb_arms_grace_activation = false;
+	if(isdefined(self.var_e445bfc6) && self.var_e445bfc6)
+	{
+		self.var_e445bfc6 = false;
+		self bgb::give("zm_bgb_arms_grace");
+		self thread bgb_arms_grace_dmg();
+	}
+	else if(isdefined(level.givecustomloadout))
+	{
+		self [[level.givecustomloadout]]();
+	}
+}
+
+bgb_arms_grace_dmg()
+{
+	self endon("disconnect");
+	self endon("bled_out");
+	self endon("bgb_update");
+	self.bgb_arms_grace_activation = true;
+	self thread bgb_arms_grace_deactivate();
+	self bgb::run_timer(BGB_ARMS_GRACE_DURATION);
+	self thread bgb_arms_grace_cleanup();
+}
+
+bgb_arms_grace_deactivate()
+{
+	self notify("bgb_arms_grace_deactivate");
+	self endon("bgb_arms_grace_deactivate");
+	self endon("disconnect");
+	self util::waittill_any_timeout(BGB_ARMS_GRACE_DURATION, "bgb_update");
+	self.bgb_arms_grace_activation = false;
+}
+
+bgb_ag_active()
+{
+	return isdefined(self.bgb_arms_grace_activation) && self.bgb_arms_grace_activation;
+}
+
+bgb_arms_grace_cleanup()
+{
+	self bgb::take();
+	self clientfield::set_player_uimodel("bgb_display", 0);
+	self clientfield::set_player_uimodel("bgb_activations_remaining", 0);
+	self bgb::clear_timer();
+}
+
+bgb_always_done_swiftly_disable()
+{
+	self unsetperk("specialty_fastads");
+	if(!isdefined(self.wager_gm1_rewards) || !self.wager_gm1_rewards)
+	{
+		self unsetperk("specialty_stalker");
+	}
+}
+
+bgb_unquenchable_event()
+{
+	self endon("disconnect");
+	self endon("bgb_update");
+	self endon("bled_out");
+	while(true)
+	{
+		result = self util::waittill_any_return("perk_purchased", "player_downed");
+		if(result == "player_downed")
+		{
+			self bgb::do_one_shot_use(1);
+			return;
+		}
+		self zm_score::add_to_player_score(int(BGB_UNQUENCHABLE_CASHBACK_RD * level.round_number));
+	}
 }

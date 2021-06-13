@@ -136,6 +136,10 @@ ZoneUpdateHUD()
                 {
                     self dev_print_spawn_badloc();
                 }
+                else
+                {
+                    self luinotifyevent(&"player_spawned", 0);
+                }
             }
             else
             {
@@ -626,4 +630,28 @@ set_move_speed_scale(n_value = 1)
 {
     self setMoveSpeedScale(n_value);
     self update_gm_speed_boost(undefined, n_value);
+}
+
+#include scripts\zm\_zm_blockers;
+#include scripts\zm\_zm_utility;
+open_all_doors() // credits to _Dev <3
+{
+    types = ["zombie_door", "zombie_airlock_buy", "zombie_debris"];
+    foreach(type in types)
+    {
+        zombie_doors = GetEntArray(type, "targetname");
+        foreach(door in zombie_doors)
+        {
+            if(door._door_open == 0)
+            {
+                door thread zm_blockers::door_opened(door.zombie_cost, 0);
+                door._door_open = true;
+
+                all_trigs = GetEntArray(door.target, "target");
+                foreach(trig in all_trigs)
+                    trig thread zm_utility::set_hint_string(trig, "");
+            }
+        }
+    }
+    level._doors_done = true;
 }

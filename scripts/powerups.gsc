@@ -101,6 +101,7 @@ powerup_grab_get_players_override()
     foreach(player in players)
     {
         if(player.sessionstate != "playing") continue;
+		if(isdefined(player.gm_forceprone) && player.gm_forceprone) continue;
         if(!isdefined(player.team) || player.team == level.zombie_team) continue;
         if(isdefined(player.no_grab_powerup) && player.no_grab_powerup) continue;
 		if(isdefined(player.wager_powerups) && player.wager_powerups) continue;
@@ -122,4 +123,84 @@ powerup_grab_get_players_override()
 	}
 
     return final;
+}
+
+zombie_death_animscript_override()
+{
+	level.gm_last_killed_ent = self;
+}
+
+custom_zombie_powerup_drop(drop_point = (0,0,0))
+{
+	if(isdefined(level._custom_zombie_powerup_drop))
+	{
+		b_result = [[level._custom_zombie_powerup_drop]](drop_point);
+	}
+
+	if(isdefined(b_result) && b_result) return true;
+	if(level.powerup_drop_count >= level.zombie_vars["zombie_powerup_drop_max_per_round"])
+	{
+		return true;
+	}
+
+	if(!isdefined(level.zombie_include_powerups) || level.zombie_include_powerups.size == 0)
+	{
+		return true;
+	}
+
+	use_pv = isdefined(level.gm_last_killed_ent) && isdefined(level.gm_last_killed_ent.power_vacuum) && level.gm_last_killed_ent.power_vacuum;
+	rand_drop = randomint(100);
+	if(use_pv && rand_drop < 20)
+	{
+		debug = "zm_bgb_power_vacuum";
+	}
+	else if(rand_drop > 2)
+	{
+		if(!level.zombie_vars["zombie_drop_item"])
+		{
+			return true;
+		}
+		debug = "score";
+	}
+	else
+	{
+		debug = "random";
+	}
+	playable_area = getentarray("player_volume", "script_noteworthy");
+	level.powerup_drop_count++;
+	powerup = zm_net::network_safe_spawn("powerup", 1, "script_model", drop_point + vectorscale((0, 0, 1), 40));
+	valid_drop = 0;
+	for(i = 0; i < playable_area.size; i++)
+	{
+		if(powerup istouching(playable_area[i]))
+		{
+			valid_drop = 1;
+			break;
+		}
+	}
+	if(valid_drop && level.rare_powerups_active)
+	{
+		pos = (drop_point[0], drop_point[1], drop_point[2] + 42);
+		if(zm_powerups::check_for_rare_drop_override(pos))
+		{
+			level.zombie_vars["zombie_drop_item"] = 0;
+			valid_drop = 0;
+		}
+	}
+	if(!valid_drop)
+	{
+		level.powerup_drop_count--;
+		powerup delete();
+		return true;
+	}
+
+	powerup zm_powerups::powerup_setup();
+	powerup thread zm_powerups::powerup_timeout();
+	powerup thread zm_powerups::powerup_wobble();
+	powerup thread zm_powerups::powerup_grab();
+	powerup thread zm_powerups::powerup_move();
+	powerup thread zm_powerups::powerup_emp();
+	level.zombie_vars["zombie_drop_item"] = 0;
+	level notify("powerup_dropped", powerup);
+	return true;
 }

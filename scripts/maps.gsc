@@ -218,7 +218,6 @@ GetRandStartZone(player, return_struct)
     
     spawn_zone = level.gm_spawns[level.spawn_index];
     level.spawn_index = (level.spawn_index + 1) % level.gm_spawns.size;
-
     player.gmspawn = spawn_zone;
     player.visited_zones = [];
 
@@ -402,17 +401,15 @@ zm_zod_pap()
     level.zombie_weapons[getweapon("idgun_0")].is_in_box = 1;
     level.zombie_weapons[getweapon("idgun_0")].upgrade = getweapon("idgun_upgraded_0");
 
-    level.aat_exemptions[getweapon("idgun_0")] = 1;
-    level.aat_exemptions[getweapon("idgun_upgraded_0")] = 1;
-
-    zm_weapons::include_zombie_weapon(getweapon("tesla_gun"), true);
+    level.zombie_include_weapons[getweapon("tesla_gun")] = 1;
     zm_weapons::add_zombie_weapon("tesla_gun", "tesla_gun_upgraded", undefined, 950, undefined, undefined, 950, false, false, "");
+    level.zombie_include_weapons[getweapon("tesla_gun")] = 1;
+    level.zombie_weapons[getweapon("tesla_gun")].is_in_box = 1;
+    level.zombie_weapons[getweapon("tesla_gun")].upgrade = getweapon("tesla_gun_upgraded");
+    level.zombie_weapons_upgraded[getweapon("tesla_gun_upgraded")] = getweapon("tesla_gun");
     
     if(isdefined(level.content_weapons))
         arrayremovevalue(level.content_weapons, getweapon("tesla_gun"));
-    
-    level.zombie_weapons[getweapon("tesla_gun")].is_in_box = 1;
-    level.zombie_weapons[getweapon("tesla_gun")].upgrade = getweapon("tesla_gun_upgraded");
 
     locker = level.var_ca7eab3b;
     locker.var_116811f0 = 3;

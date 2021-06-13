@@ -246,7 +246,7 @@
 // default value: 8
 #define STAFF_FIRE_DMG_DURATION = 8;
 
-// Defines the percent reduction for zombie damage when a round resets, and inversely, the percent to increase zombie damage when the global scalar is not 100%
+// Defines the percent reduction for zombie damage when a round resets, and inversely, the percent to increase zombie damage when the global scalar is not 100%. This is also the damage increase players receive against zombies when a round resets, etc.
 // default value: 0.25
 #define GM_ZDMG_RUBBERBAND_PERCENT = 0.25;
 
@@ -418,6 +418,54 @@
 // default value: 1.15
 #define GM_MOVESPEED_BOOSTER_MP = 1.15;
 
+// Time, in seconds, that fear in the headlights is active
+// default value: 30
+#define BGB_FITH_ACTIVE_TIME = 30;
+
+// If true, will enable early spawns for players who are defeated during a round
+// default value: false
+#define USE_MIDROUND_SPAWNS = true;
+
+// Defines the time in seconds to wait before attempting to respawn a player mid round. Requires USE_MIDROUND_SPAWNS = true
+// default value: 180
+#define PLAYER_MIDROUND_RESPAWN_DELAY = 180;
+
+// Defines the percent of range forgiveness given to a thundergun shot when calculating its expected damage
+// default value: 0.05
+#define THUNDERGUN_FORGIVENESS_PCT = 0.05;
+
+// Time in seconds that a player will be forced to prone when bgb crawlspace is used.
+// default value: 3
+#define BGB_CRAWL_SPACE_TIME = 3;
+
+// Percent to reduce spawn points by when a player dies with phoenix up
+// default value: 0.35
+#define BGB_PHOENIX_SPAWN_REDUCE_POINTS = 0.35;
+
+// Amount of points to give per activation of extra credit
+// default value: 2500
+#define BGB_EXTRA_CREDIT_VALUE = 2500;
+
+// Percent to reduce spawn points by when a player goes down with coagulant
+// default value: 0.5
+#define BGB_COAGULANT_SPAWN_REDUCE_POINTS = 0.5;
+
+// Scalar to apply for damage done to zombies when a player has the arms grace effect active
+// default value: 5.0
+#define BGB_ARMS_GRACE_ZM_DMG = 5.0;
+
+// Time in seconds that the arms grace effect will be active after respawning
+// default value: 60
+#define BGB_ARMS_GRACE_DURATION = 60;
+
+// Scalar to apply for damage done to players when a player has the arms grace effect active
+// default value: 1.25
+#define BGB_ARMS_GRACE_PVP_DMG = 1.25;
+
+// Defines the amount of points, scaled by the round number, to award players who purchase a perk with unquenchable
+// default value: 250
+#define BGB_UNQUENCHABLE_CASHBACK_RD = 250;
+
 #endregion
 
 ///////////////////////////
@@ -437,7 +485,7 @@
 
 // When false, disables all development features
 // default value: false
-#define IS_DEBUG = true;
+#define IS_DEBUG = false;
 
 // When true, sets developer dvar to 2
 // default value: false
@@ -457,7 +505,7 @@
 
 // When true, gives all players 25000 starting points
 // default value: false
-#define DEV_POINTS_ALL = false;
+#define DEV_POINTS_ALL = true;
 
 // When true, spawns in 3 test clients. NOTE: on any map with spiders, this option will cause a fatal crash within 3 rounds.
 // default value: false
@@ -469,7 +517,7 @@
 
 // When true, enables development hud features
 // default value: false
-#define DEV_HUD = false;
+#define DEV_HUD = true;
 
 // When true, creates a dev hud for the current zone
 // default value: false
@@ -605,7 +653,7 @@
 
 // if true, all staffs will be upgraded by default.
 // default value: false
-#define DEBUG_UPGRADED_STAFFS = true;
+#define DEBUG_UPGRADED_STAFFS = false;
 
 // if true, the host will acquire an annihilator on spawn automatically
 // default value: false
@@ -719,6 +767,10 @@
 // default value: false
 #define DEV_FORGEMODE = false;
 
+// When true, the host player will see normal spectator screen
+// default: false;
+#define DEV_DISABLE_HOST_SPEC_FIX = false;
+
 #endregion
 
 // add your custom maps here
@@ -798,6 +850,57 @@ custom_maps()
         case "zm_testlevel":
             // blocks an out of map spot where cherry is at.
             level.gm_blacklisted[level.gm_blacklisted.size] = "teleporter_zone";
+            gm_generate_spawns(); // generate spawn points for this map, using the POI system
+        break;
+
+        case "zm_terminal":
+            ents = ["auto374", "auto373", "grow_soul2_door"];
+            foreach(ent in ents)
+            {
+                _ent = getent(ent, "targetname");
+                if(isdefined(_ent))
+                {
+                    _ent delete();
+                }
+            }
+            unlock_all_debris();
+            gm_generate_spawns(); // generate spawn points for this map, using the POI system
+        break;
+
+        case "zm_loweffortkappa":
+            ent = getent("pap_door", "targetname");
+            if(isdefined(ent))
+            {
+                ent delete();
+            }
+            unlock_all_debris();
+            open_all_doors();
+            gm_generate_spawns(); // generate spawn points for this map, using the POI system
+        break;
+
+        case "zm_pdp_dungeon":
+            open_all_doors();
+            str_prefix = "electric_door_";
+            a_str_values = ["a", "b", "c", "d"];
+            for(i = 0; i < a_str_values.size; i++)
+            {
+                str_value = str_prefix + a_str_values[i];
+                ents = getentarray(str_value, "targetname");
+                for(j = 0; j < ents.size; j++)
+                {
+                    ents[j] delete();
+                }
+            }
+            gm_generate_spawns(); // generate spawn points for this map, using the POI system
+        break;
+
+        case "zm_spring_breakers":
+            unlock_all_debris();
+            gm_generate_spawns(); // generate spawn points for this map, using the POI system
+        break;
+
+        case "zm_family_guy":
+            unlock_all_debris();
             gm_generate_spawns(); // generate spawn points for this map, using the POI system
         break;
         

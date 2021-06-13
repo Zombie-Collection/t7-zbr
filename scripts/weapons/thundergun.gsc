@@ -87,7 +87,8 @@ thundergun_get_enemies_in_range()
 ThundergunKnockback(attacker, weapon)
 {
     alpha = min(1, distance(attacker.origin, self.origin) / level.zombie_vars["thundergun_knockdown_range"]);
-    velocity = LerpFloat(TGUN_LAUNCH_MIN_VELOCITY, TGUN_LAUNCH_MAX_VELOCITY, 1 - alpha);
+    d = min(1.0, (1.0 - alpha) + THUNDERGUN_FORGIVENESS_PCT);
+    velocity = LerpFloat(TGUN_LAUNCH_MIN_VELOCITY, TGUN_LAUNCH_MAX_VELOCITY, d);
     angles = VectorNormalize(anglesToForward(attacker getPlayerAngles()));
 
     final_velocity = angles * velocity;
@@ -97,7 +98,7 @@ ThundergunKnockback(attacker, weapon)
     self setVelocity(final_velocity_clamped);
     self.launch_magnitude_extra = 200;
     self.v_launch_direction_extra = vectorNormalize(final_velocity_clamped);
-    self dodamage(TGUN_BASE_DMG_PER_ROUND * level.round_number, self.origin, attacker, undefined, "none", "MOD_PISTOL_BULLET", 0, level.weaponnone);
+    self dodamage(int(d * d * TGUN_BASE_DMG_PER_ROUND) * level.round_number, self.origin, attacker, undefined, "none", "MOD_PISTOL_BULLET", 0, level.weaponnone);
     self thread TG_ImpactDamage(attacker);
 }
 

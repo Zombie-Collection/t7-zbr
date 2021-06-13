@@ -72,6 +72,13 @@ setup_weapons()
         level._hero_weapons[getweapon("hero_gravityspikes_melee")].wield_fn = ::wield_gravityspikes;
         level._hero_weapons[getweapon("hero_gravityspikes_melee")].unwield_fn = ::unwield_gravityspikes;
     }
+    if(isdefined(level.idgun_weapons) && isdefined(level.idgun_weapons.size) && level.idgun_weapons.size)
+    {
+        level.zombie_include_weapons[getweapon("idgun_0")] = 1;
+        level.zombie_weapons[getweapon("idgun_0")].is_in_box = 1;
+        level.zombie_weapons[getweapon("idgun_0")].upgrade = getweapon("idgun_upgraded_0");
+        level.zombie_weapons_upgraded[getweapon("idgun_upgraded_0")] = getweapon("idgun_0");
+    }
     if(isdefined(level.var_32bc7eba))
     {
         tomb_staff_init();
@@ -126,6 +133,10 @@ setup_environment()
     level.drawfriend = false;
     level.custom_firesale_box_leave = false;
     level.zombiemode_reusing_pack_a_punch = true; // attempt to circumvent anti-double pap on custom maps
+    level.var_b426c9 = true; // disables zm_island seeds
+    level.forceallallies = false;
+    level.ondeadevent = undefined;
+    level.allies = undefined;
     #endregion
 
     #region Scalar
@@ -139,6 +150,11 @@ setup_environment()
     level.max_solo_lives = 9999;
     level._race_team_double_points = undefined;
     define_zombie_vars();
+    #endregion
+
+    #region misc
+    level.zombie_team = "team3";
+    level.zombie_team_index = 3;
     #endregion
 
     #region Callbacks and Overrides
@@ -161,6 +177,9 @@ setup_environment()
     level._player_score_override = level.player_score_override;
     level.player_score_override = serious::player_score_override;
     level.get_player_weapon_limit = serious::get_player_weapon_limit;
+    level.zombie_death_animscript_override = serious::zombie_death_animscript_override;
+    level._func_magicbox_weapon_spawned = level.func_magicbox_weapon_spawned;
+    level.func_magicbox_weapon_spawned = serious::wager_func_magicbox_weapon_spawned;
     
     level._zombiemode_check_firesale_loc_valid_func = serious::check_firesale_valid_loc;
     level.player_intersection_tracker_override = serious::true_one_arg;
@@ -175,6 +194,8 @@ setup_environment()
         level.zombie_round_change_custom = serious::Event_RoundNext;
     else
         level.round_start_custom_func = serious::Event_RoundNext;
+
+    zm_spawner::register_zombie_death_event_callback(serious::wager_gg_kill);
     #endregion
 
     #region Gamemode Variables
@@ -210,6 +231,12 @@ define_zombie_vars()
             level.zombie_vars["team" + i] = [];
         level.zombie_vars["team" + i]["zombie_point_scalar"] = 1;
     }
+    foreach(team in level.gm_teams)
+    {
+        if(!isdefined(level.zombie_vars[team]) || !isarray(level.zombie_vars[team]))
+            level.zombie_vars[team] = [];
+        level.zombie_vars[team]["zombie_point_scalar"] = 1;
+    }
     level.zombie_vars["allies"]["zombie_point_scalar"] = 1;
     level.zombie_vars["zombie_move_speed_multiplier"] = GM_ZM_SPEED_MULT;
     level.zombie_vars[ "penalty_no_revive" ] = 0;
@@ -220,11 +247,6 @@ define_zombie_vars()
 
 apply_bgb_changes()
 {
-    // gums with no purpose are just removed from your pack
-    blacklist_bgb("zm_bgb_coagulant");
-    blacklist_bgb("zm_bgb_arms_grace");
-    blacklist_bgb("zm_bgb_phoenix_up");
-
     level.bgb["zm_bgb_fear_in_headlights"].activation_func = serious::bgb_fith_activate;
     level.bgb["zm_bgb_round_robbin"].activation_func = serious::bgb_rr_activate;
     level.bgb["zm_bgb_pop_shocks"].var_d99aa464 = serious::bgb_ps_actordamage;
@@ -237,6 +259,21 @@ apply_bgb_changes()
     level.bgb["zm_bgb_anywhere_but_here"].activation_func = serious::anywhere_but_here_activation;
     level.bgb["zm_bgb_head_drama"].limit = 1;
     level.bgb["zm_bgb_near_death_experience"].limit = 1; // this is too strong to last several rounds
+    level.bgb["zm_bgb_power_vacuum"].limit = 1;
+    level.bgb["zm_bgb_armamental_accomplishment"].disable_func = serious::bgb_armamental_disable;
+    level.bgb["zm_bgb_crawl_space"].activation_func = serious::bgb_crawl_space_activate;
+    level.bgb["zm_bgb_extra_credit"].activation_func = serious::bgb_extra_credit_activate;
+    level.bgb["zm_bgb_impatient"].limit = serious::bgb_impatient_event;
+    level.bgb["zm_bgb_coagulant"].disable_func = undefined;
+    level.bgb["zm_bgb_coagulant"].limit_type = "event";
+    level.bgb["zm_bgb_coagulant"].limit = serious::bgb_coagulant_activate;
+    level.bgb["zm_bgb_always_done_swiftly"].disable_func = serious::bgb_always_done_swiftly_disable;
+    level.bgb["zm_bgb_phoenix_up"].limit_type = "event";
+    level.bgb["zm_bgb_phoenix_up"].limit = serious::bgb_phoenix_up_activate;
+    level.bgb["zm_bgb_unquenchable"].limit = serious::bgb_unquenchable_event;
+    bgb::register_lost_perk_override("zm_bgb_phoenix_up", serious::bgb_pup_lost_perk, false);
+
+    level.givestartloadout = serious::bgb_arms_grace_loadout;
 
     level.bgb_in_use = true;
     level.var_6cb6a683 = 99; // remove max gobble gum purchases per round
@@ -274,6 +311,8 @@ apply_powerup_changes()
     level._custom_powerups["carpenter"].grab_powerup = serious::carpenter_override;
     level._custom_powerups["nuke"].grab_powerup = serious::nuke_override;
     level.powerup_grab_get_players_override = serious::powerup_grab_get_players_override;
+    level._custom_zombie_powerup_drop = level.custom_zombie_powerup_drop;
+    level.custom_zombie_powerup_drop = serious::custom_zombie_powerup_drop;
 }
 
 apply_perk_changes()
@@ -351,7 +390,7 @@ hostdev()
         if(!isdefined(self.max_points_earned))
             self.max_points_earned = 500;
         
-        self.max_points_earned = int(max(self.max_points_earned * SPAWN_REDUCE_POINTS, 25000));
+        self.max_points_earned = int(max(self.max_points_earned * self get_spawn_reduce_mp(), 25000));
         targ_clamped = int(min(MAX_RESPAWN_SCORE, self.max_points_earned));
         self zm_score::add_to_player_score(targ_clamped - self.score, 0, "gm_zbr_admin");
         self Event_PointsAdjusted();
@@ -550,9 +589,9 @@ AddGamemodeTestClient()
     bot setOrigin(bot getOrigin() + (randomInt(30), randomInt(-30), randomFloat(40)));
     
     if(DEBUG_TEAMS)
-    {
-        bot SetGMTeam("allies");
+    {        
         level.players[0] SetGMTeam(bot GetGMTeam());
+        bot SetGMTeam("allies");
     }
     if(IS_DEBUG && DEBUG_BOTS_FREEZE)
     {
@@ -565,11 +604,15 @@ SetGMTeam(team)
     self.sessionteam = team;
     self._encounters_team = team;
     self.no_damage_points = false;
+    self.switching_teams = 1;
+	self.joining_team = team;
+	self.leaving_team = "allies";
     self.team = team;
     self SetTeam(team);
     self.pers["team"] = team;
     self notify( "joined_team" );
     level notify( "joined_team" );
+    self.switching_teams = 0;
 }
 
 FastQuit()
@@ -596,10 +639,11 @@ GMSpawned()
     self restore_earned_points();
     self apply_post_delay_spawn_variables();
     self apply_player_spectator_permissions();
-    self remove_blacklisted_bgbs();
+    self fix_bgb_pack();
     self player_bgb_buys_1();
     self gm_hud_set_visible(true);
     self hostdev();
+    self update_gm_speed_boost(self);
 
     self thread protect_from_zombies(15);
     self thread GM_HitBufferRecovery();
@@ -611,7 +655,7 @@ GMSpawned()
     if(!IS_DEBUG || !DEV_NO_WAGERS)
     {
         // level runs this thread so that if a player disconnects the thread doesnt crash the game.
-        level thread spawn_wager_totem(groundtrace(self geteye(), self geteye() - (0,0,10000), false, self)["position"], (0,0,0), self);
+        level thread spawn_wager_totem(groundtrace(self geteye(), self geteye() - (0, 0, 10000), false, self)["position"], (0,0,0), self);
     }
     if(IS_DEBUG && DEV_ICON_CAPTURE)
     {
@@ -653,7 +697,7 @@ gm_spawn_protect(time)
     self.gm_protected = true;
     self disableusability();
     self enableInvulnerability();
-    wait SPAWN_DELAY + time;
+    self util::waittill_any_timeout(SPAWN_DELAY + time, "weapon_fired", "grenade_fire", "melee_fire");
     self enableusability();
     if(!self ishost() || !IS_DEBUG || !DEV_GODMODE)
     {
@@ -676,7 +720,8 @@ apply_pre_delay_spawn_variables()
     self.launch_magnitude_extra = 0; // remove cached magnitude for death ragdoll
     self.v_launch_direction_extra = (0,0,0); // remove cached direction vector for death ragdoll
     self.no_grab_powerup = false; // reset no grab when spawning
-    
+    self.power_vacuum = false; // reset power vacuum status
+
     self.var_789ebfb2 = false; // afflicted by storm bow attack
     self.zombie_tesla_hit = false; // afflicted by any tesla attack
     self.var_ca25d40c = false; // afflicted by fire bow attack
@@ -727,7 +772,7 @@ restore_earned_points()
     if(self.max_points_earned < getRndMinPts())
         self.max_points_earned = getRndMinPts();
 
-    targ_clamped = int(min(MAX_RESPAWN_SCORE, self.max_points_earned * SPAWN_REDUCE_POINTS));
+    targ_clamped = int(min(MAX_RESPAWN_SCORE, self.max_points_earned * self get_spawn_reduce_mp()));
     self zm_score::add_to_player_score(targ_clamped - self.score, 0, "gm_zbr_admin");
 
     if(IS_DEBUG && DEV_POINTS_ALL)
@@ -738,6 +783,15 @@ restore_earned_points()
     }
 
     self Event_PointsAdjusted();
+}
+
+get_spawn_reduce_mp()
+{
+    if(isdefined(self.gm_override_reduce_pts) && isfloat(self.gm_override_reduce_pts))
+    {
+        return self.gm_override_reduce_pts;
+    }
+    return SPAWN_REDUCE_POINTS;
 }
 
 do_weapon_callbacks()
@@ -760,45 +814,26 @@ apply_post_delay_spawn_variables()
 {
     self.n_bleedout_time_multiplier = N_BLEEDOUT_BASE;
     level.solo_lives_given = 0;
+    self.gm_override_reduce_pts = undefined;
     foreach(bgb in self.var_98ba48a2)
     {
         self.var_e610f362[bgb].var_b75c376 = -999; // remove bgb usage
+        self.var_e610f362[bgb].var_e0b06b47 = 999; // quantity of this gum
     }
     if(isdefined(self.spectate_obj)) self.spectate_obj destroy();
 }
 
 apply_player_spectator_permissions()
 {
-    // fixes player spectator permissions
-    if(self ishost())
+    foreach(team in level.gm_teams)
     {
-        self allowSpectateTeam("allies", 0);
-        self allowSpectateTeam("axis", 0);
-        for(i = 3; i < 8; i++)
-            self allowSpectateTeam("team" + i, 0);
-        
-        self allowSpectateTeam("freelook", 1);
-        self allowSpectateTeam("none", 1);
-    }
-    else
-    {
-        self allowSpectateTeam("allies", 1);
-        self allowSpectateTeam("axis", 0);
-        for(i = 3; i < 8; i++)
-            self allowSpectateTeam("team" + i, 1);
-        
-        self allowSpectateTeam("freelook", 0);
-        self allowSpectateTeam("none", 0);
+        self allowSpectateTeam(team, 1);
     }
 }
 
 on_joined_spectator()
 {
     self apply_player_spectator_permissions();
-    if(self ishost())
-    {
-        self thread gm_spectator();
-    }
 }
 
 protect_from_zombies(time = 5)
@@ -884,9 +919,7 @@ GM_HitBufferRecovery()
 GetGMTeam()
 {
     if(IS_DEBUG && DEBUG_ALL_FRIENDS) return "allies";
-    if(self ishost()) return "allies";
-    teamid = self GetSpawnTeamID();
-    return "team" + teamid;
+    return get_fixed_team_name();
 }
 
 true_one_arg(player)
@@ -927,6 +960,19 @@ _actor_damage_override_wrapper(inflictor, attacker, damage, flags, meansOfDeath,
         damage = int(damage * attacker.wager_zm_outgoing_damage);
     }
 
+    if(!isdefined(level.gm_rubber_banding_scalar))
+    {
+        level.gm_rubber_banding_scalar = 1.0f;
+    }
+
+    // rubberband damage increase against zombies when a round resets
+    damage = int(damage * (1.0f + max(1 - level.gm_rubber_banding_scalar, 0)));
+
+    if(isplayer(attacker) && attacker bgb_ag_active())
+    {
+        damage = int(damage * BGB_ARMS_GRACE_ZM_DMG);
+    }
+
     self [[ level._callbackActorDamage ]](inflictor, attacker, damage, flags, meansOfDeath, weapon, vPoint, vDir, sHitLoc, vDamageOrigin, psOffsetTime, boneIndex, modelIndex, surfaceType, vSurfaceNormal);
     if(isdefined(self.is_clone) && self.is_clone) return;
 
@@ -934,6 +980,8 @@ _actor_damage_override_wrapper(inflictor, attacker, damage, flags, meansOfDeath,
     if(isdefined(attacker) && isplayer(attacker) && isdefined(self.health) && isdefined(self.maxhealth))
     {
         if(!isdefined(weapon)) weapon = attacker getCurrentWeapon();
+
+        self.power_vacuum = attacker bgb::is_enabled("zm_bgb_power_vacuum");
         if(!(self aat_response(self.health > 0, inflictor, attacker, damage, flags, meansOfDeath, weapon, vpoint, vdir, shitloc, psoffsettime)))
         {
             damageStage = _damage_feedback_get_stage(self);
@@ -1198,6 +1246,11 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
         if(isdefined(level.zombie_vars[attacker.team]["zombie_insta_kill"]) && level.zombie_vars[attacker.team]["zombie_insta_kill"])
         {
             result = int(result * INSTAKILL_DMG_PVP_MULTIPLIER);
+        }
+
+        if(attacker bgb_ag_active())
+        {
+            result = int(result * BGB_ARMS_GRACE_PVP_DMG);
         }
 
         if(self bgb_any_frozen()) result = int(result * BGB_FROZEN_DAMAGE_REDUX);
@@ -1731,7 +1784,7 @@ Check_GMObjectiveState()
     }
 }
 
-update_gm_speed_boost(ignore_entity, n_value = 1)
+update_gm_speed_boost(ignore_entity = self, n_value = 1)
 {
     b_any_objective = false;
     foreach(player in level.players)
@@ -1842,6 +1895,13 @@ Event_RoundNext()
 
     if(level.gm_lastround < level.round_number)
     {
+        foreach(player in level.players)
+        {
+            if(isdefined(player.wager_loadout_rounds) && player.wager_loadout_rounds)
+            {
+                player thread wager_loadout_rounds_activate();
+            }
+        }
         Round_PointScaling();
         level.player_weapon_boost += WEP_DMG_BOOST_PER_ROUND;
         level.gm_lastround = level.round_number;
@@ -2055,19 +2115,37 @@ wait_and_return_weapon()
 
 GM_FairRespawn()
 {
+    self notify("fair_respawn");
+    self endon("fair_respawn");
     self endon("spawned_player");
     self endon("disconnect");
     level endon("end_game");
     self util::waittill_any("bled_out", "spawned_spectator");
-    wait PLAYER_RESPAWN_DELAY;
+    if(!USE_MIDROUND_SPAWNS || gm_any_has_objective())
+    {
+        wait PLAYER_RESPAWN_DELAY;
+        if(gm_any_has_objective())
+        {
+            self thread wait_and_revive_player();
+        }
+    }
+    else
+    {
+        wait PLAYER_MIDROUND_RESPAWN_DELAY;
+        self thread wait_and_revive_player();
+    }
+}
+
+gm_any_has_objective()
+{
     foreach(player in level.players)
     {
         if(isdefined(player.gm_objective_state) && player.gm_objective_state)
         {
-            self thread wait_and_revive_player();
-            return;
+            return true;
         }
     }
+    return false;
 }
 
 LoadoutRecorder()
@@ -2141,8 +2219,7 @@ GiveCatalystLoadout()
                 {
                     self flag::set("has_skull");
                 }
-                self zm_weapons::weapon_give(weapon, 0, 0, 1, 0);
-                self zm_utility::set_player_hero_weapon(weapon);
+                self zm_magicbox::give_hero_weapon(weapon);
             break;
             case zm_utility::is_melee_weapon(weapon):
             case zm_utility::is_lethal_grenade(weapon):
@@ -2185,18 +2262,23 @@ GiveAAT(player, aat, print=true, weapon)
         weapon = AAT::get_nonalternate_weapon(player zm_weapons::switch_from_alt_weapon(player GetCurrentWeapon()));
 
     player.AAT[weapon] = aat;
-
     player clientfield::set_to_player("aat_current", level.AAT[ player.AAT[weapon] ].var_4851adad);
 }
 
 PlayerDownedCallback(eInflictor, eAttacker, iDamage, sMeansOfDeath, weapon, vDir, sHitLoc, psOffsetTime, deathAnimDuration)
 {
-    if(self hasperk("specialty_quickrevive") || self bgb::is_enabled("zm_bgb_self_medication"))
+    if(self hasperk("specialty_quickrevive") || self bgb::is_enabled("zm_bgb_self_medication") || 
+        self bgb::is_enabled("zm_bgb_phoenix_up") || self bgb::is_enabled("zm_bgb_coagulant"))
     {
         self.n_bleedout_time_multiplier = 1;
         level.solo_lives_given = 0;
         self thread fix_bleedout();
-        if(!self bgb::is_enabled("zm_bgb_self_medication"))
+        if(self bgb::is_enabled("zm_bgb_phoenix_up") || self bgb::is_enabled("zm_bgb_coagulant"))
+        {
+            self unlink();
+            self thread anywhere_but_here_activation();
+        }
+        else if(!self bgb::is_enabled("zm_bgb_self_medication"))
         {
             self thread zm::wait_and_revive();
             self unlink();
@@ -2209,6 +2291,12 @@ PlayerDownedCallback(eInflictor, eAttacker, iDamage, sMeansOfDeath, weapon, vDir
         if(weapon_is_ds(weapon)) eAttacker = eAttacker.player;
         if(isdefined(eAttacker) && isplayer(eAttacker) && eAttacker != self)
         {
+            if(eAttacker.sessionstate == "playing" && isdefined(eAttacker.wager_gun_game) && eAttacker.wager_gun_game)
+            {
+                eAttacker thread wager_gg_swap();
+            }
+            self.power_vacuum = eAttacker bgb::is_enabled("zm_bgb_power_vacuum");
+            level.gm_last_killed_ent = self;
             eAttacker notify(#"hash_935cc366");
             eAttacker AddRankXp("kill", weapon, undefined, false, true, 100);
             if(!zm_utility::is_hero_weapon(weapon) && eattacker.sessionstate == "playing" && !zm_utility::is_hero_weapon(eattacker getCurrentWeapon()))
@@ -2340,7 +2428,6 @@ GM_BeginCountdown()
     foreach(player in level.players)
     {
         prefixCol = (player == self) ? "^2" : "^1";
-
         player thread wait_and_revive_player(prefixCol + self.name + "^7 has reached the score limit!");
     }
 
@@ -2349,13 +2436,19 @@ GM_BeginCountdown()
     while(self.gm_objective_state)
     {
         wait 1;
-        while(bgb::is_team_active("zm_bgb_killing_time")) wait 0.25;
+        while(bgb::is_team_active("zm_bgb_killing_time") || bgb::is_team_active("zm_bgb_fear_in_headlights")) wait 0.25;
+
+        if(!self.gm_objective_state)
+        {
+            break;
+        }
+        
         self.gm_objective_timesurvived++;
 
         foreach(player in level.players)
         {
             player UpdateGMProgress(self);
-            player update_gm_speed_boost();
+            player update_gm_speed_boost(player);
         }
 
         if(self.gm_objective_timesurvived >= OBJECTIVE_WIN_TIME)
@@ -2365,7 +2458,7 @@ GM_BeginCountdown()
     foreach(player in level.players)
     {
         player UpdateGMProgress(self);
-        player update_gm_speed_boost();
+        player update_gm_speed_boost(player);
     }
 
     KillHeadIcons(self);

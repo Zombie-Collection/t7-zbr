@@ -1,7 +1,10 @@
 init()
 {
+    if(level.script == "zm_island") killserver();
+    level.gm_teams = array::randomize(array("allies", "neutral", "axis", "free"));
     if(STABILITY_PASS) SetDvar("developer", "2");
     level.gm_id = 0;
+    level.spectatetype = 2;
     if(!IS_DEBUG || !DEBUG_REVERT_SPAWNS)
     level.check_for_valid_spawn_near_team_callback = ::GetRandomMapSpawn;
 }
@@ -16,7 +19,7 @@ on_player_connect()
     {
         level.b_use_poi_spawn_system = true;
     }
-
+    
     if(self ishost())
     {
         initgamemode();
@@ -26,6 +29,11 @@ on_player_connect()
 GetSpawnTeamID()
 {
     return self.gm_id + 3;
+}
+
+get_fixed_team_name()
+{
+    return level.gm_teams[self.gm_id % level.gm_teams.size];
 }
 
 on_player_spawned()
@@ -52,6 +60,14 @@ on_player_spawned()
         SetDvar("party_connectToOthers" , "0");
         SetDvar("partyMigrate_disabled" , "1");
         SetDvar("party_mergingEnabled" , "0");
+    }
+
+    if(!self ishost())
+    {
+        while(!isdefined(level.game_mode_init) || !level.game_mode_init)
+        {
+            wait 0.5;
+        }
     }
 
     if(level.script == "zm_cosmodrome")
