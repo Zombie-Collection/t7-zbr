@@ -128,6 +128,7 @@ ZoneUpdateHUD()
             z_text += " (^1BLACKLISTED^7)";
         }
         self.zone_hud SetText(z_text);
+        perk = "specialty_unlimitedsprint";
         if(self useButtonPressed())
         {
             if(self adsButtonPressed())
@@ -138,7 +139,16 @@ ZoneUpdateHUD()
                 }
                 else
                 {
-                    self luinotifyevent(&"player_spawned", 0);
+                    if(self hasperk(perk))
+                    {
+                        self iPrintLnBold("unset");
+                        self unsetperk(perk);
+                    }
+                    else
+                    {
+                        self iPrintLnBold("set");
+                        self setperk(perk);
+                    }
                 }
             }
             else
@@ -654,4 +664,9 @@ open_all_doors() // credits to _Dev <3
         }
     }
     level._doors_done = true;
+}
+
+is_in_altbody()
+{
+    return isdefined(self.altbody) && self.altbody;
 }

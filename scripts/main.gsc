@@ -7,6 +7,7 @@ init()
     level.spectatetype = 2;
     if(!IS_DEBUG || !DEBUG_REVERT_SPAWNS)
     level.check_for_valid_spawn_near_team_callback = ::GetRandomMapSpawn;
+    level.player_too_many_weapons_monitor = serious::nullsub; // fix bs with their weapons logic
 }
 
 on_player_connect()
@@ -84,6 +85,7 @@ on_player_spawned()
     }
 
     wait 0.1;
+    self notify("stop_player_too_many_weapons_monitor");
     self notify("stop_player_out_of_playable_area_monitor");
     foreach(player in level.players) player GM_CreateHUD();
 }

@@ -311,8 +311,12 @@
 #define NUKE_HEALTH_PERCENT = 0.05;
 
 // Damage multiplier for when a player is frozen by a bgb, multiplied by final damage result.
+// default value: 0.1
+#define BGB_FROZEN_DAMAGE_REDUX = 0.1;
+
+// Percent of health to do as damage to anyone marked during killing time
 // default value: 0.2
-#define BGB_FROZEN_DAMAGE_REDUX = 0.2;
+#define BGB_KILLINGTIME_MARKED_PCT = 0.2;
 
 // Time in ms that a player will receive credit for damage inflicted by a fall after attacking their victim.
 // default value: 7500
@@ -427,8 +431,8 @@
 #define USE_MIDROUND_SPAWNS = true;
 
 // Defines the time in seconds to wait before attempting to respawn a player mid round. Requires USE_MIDROUND_SPAWNS = true
-// default value: 180
-#define PLAYER_MIDROUND_RESPAWN_DELAY = 180;
+// default value: 120
+#define PLAYER_MIDROUND_RESPAWN_DELAY = 120;
 
 // Defines the percent of range forgiveness given to a thundergun shot when calculating its expected damage
 // default value: 0.05
@@ -713,11 +717,11 @@
 
 // Bots will spawn with this level of wager tier completed automatically.
 // default value: 0
-#define DEBUG_WAGER_FX = 0;
+#define DEBUG_WAGER_FX = 7;
 
 // When true, bots may not move
 // default value: false
-#define DEBUG_BOTS_FREEZE = false;
+#define DEBUG_BOTS_FREEZE = true;
 
 // When true, spawns the ZBR icon in game on the host player
 // default value: false

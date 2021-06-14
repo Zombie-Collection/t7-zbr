@@ -1,6 +1,8 @@
 #define WAGER_MIN_LEVEL = 1;
-#define WAGER_MAX_LEVEL = 6;
+#define WAGER_MAX_LEVEL = 7;
 #define WAGER_GM1_GG_TIME = 10;
+#define WAGER_GM2_PTIMER = 5;
+#define PERK_PAUSE_TIME = 10;
 
 init_wager_totems()
 {
@@ -10,25 +12,35 @@ init_wager_totems()
     add_wager_tier(4, "Expert II",      5.0);
     add_wager_tier(5, "Master",         10.0);
     add_wager_tier(6, "Grandmaster I",  10.0);
+    add_wager_tier(7, "Grandmaster II",  10.0);
 
     add_wager_modifier(1, "earn fewer points from zombies",                                                                                                                         serious::wager_zm_points);
     add_wager_modifier(1, "take more damage from zombies",                                                                                                                          serious::wager_zm_incoming_damage);
     add_wager_modifier(1, "deal less damage to zombies",                                                                                                                            serious::wager_zm_outgoing_damage);
+
     add_wager_modifier(2, "earn fewer points from enemy players",                                                                                                                   serious::wager_pvp_points);
     add_wager_modifier(2, "take more damage from enemy players",                                                                                                                    serious::wager_pvp_incoming_damage);
     add_wager_modifier(2, "deal less damage to enemy players",                                                                                                                      serious::wager_pvp_outgoing_damage);
-    add_wager_modifier(3, "forfeit the ability to purchase gobblegums",                                                                                                             serious::wager_bgb_pack,                serious::gums_present);
+    
+    // add_wager_modifier(3, "forfeit the ability to purchase gobblegums",                                                                                                             serious::wager_bgb_pack,                serious::gums_present);
+    add_wager_modifier(3, "replace gumball cycling with random selection",                                                                                                          serious::wager_bgb_pack_cycle,          serious::gums_present);
     add_wager_modifier(3, "forfeit a weapon slot (keep current weapon)",                                                                                                            serious::wager_weapon_slot);
     add_wager_modifier(3, "forfeit the ability to use grenades, tacticals, and specialist weapons",                                                                                 serious::wager_weapon_types);
+
     add_wager_modifier(4, "inflict no melee damage to enemy players",                                                                                                               serious::wager_pvp_melee_damage);
     add_wager_modifier(4, "forfeit the ability to grab powerups",                                                                                                                   serious::wager_powerups);
     // add_wager_modifier(4, "take 100 points of damage per second while sprinting",                                                                                                serious::wager_sprinting);
     add_wager_modifier(4, "forfeit the ability to slide",                                                                                                                           serious::wager_sliding);
+
     add_wager_modifier(5, "significantly increase the amount of points required for you to win.\nYou will take double damage from players while above the normal winning score.",   serious::wager_win);
+
     add_wager_modifier(6, "be forced to take a copy of any weapon rolled from the box",                                                                                             serious::wager_box_options,             serious::boxes_present,     "Weapons consume ammo half as quickly. Gain an additional Elo transfer bonus.");
     add_wager_modifier(6, "acquire a new weapon after each kill.\nLimited to once per " + WAGER_GM1_GG_TIME + " seconds",                                                           serious::wager_gun_game,                undefined,                  "Weapons consume ammo half as quickly. Gain an additional Elo transfer bonus.");
     add_wager_modifier(6, "acquire a new set of weapons each round",                                                                                                                serious::wager_loadout_rounds,          undefined,                  "Weapons consume ammo half as quickly. Gain an additional Elo transfer bonus.");
 
+    add_wager_modifier(7, "lose a perk " + WAGER_GM2_PTIMER + " minutes after acquiring it",                                                                                        serious::wager_perk_lifetime,           undefined,                  "Downing a player awards you their perks. Gain an additional Elo transfer bonus.");
+    add_wager_modifier(7, "toggle a perk on/off when another player acquires it",                                                                                                   serious::wager_perk_toggler,            undefined,                  "Downing a player awards you their perks. Gain an additional Elo transfer bonus.");
+    add_wager_modifier(7, "have your perks disabled for " + PERK_PAUSE_TIME + " seconds if you are attacked by a zombie",                                                           serious::wager_perk_disabler,           undefined,                  "Downing a player awards you their perks. Gain an additional Elo transfer bonus.");
 
     // selects random modifiers for this game
     for(i = WAGER_MIN_LEVEL; i <= WAGER_MAX_LEVEL; i++)
@@ -106,6 +118,7 @@ make_wager_text(tier = 1)
 spawn_wager_totem(location, angles, owner)
 {
     if(isdefined(owner.wager_totem) || level.round_number > WAGER_COMMIT_ROUND) return;
+    if(isdefined(owner.wager_tier) && owner.wager_tier >= WAGER_MAX_LEVEL) return;
     wager_totem = create_wager_totem(location, angles, owner);
     wager_totem endon("wager_totem_exit");
     wager_totem endon("death");
@@ -186,10 +199,10 @@ wager_await_accept_challenge()
         self.challenge_playing = true;
         self.l_shotgun thread wager_scene_shotgun_fire(self.owner);
         self.r_shotgun thread wager_scene_shotgun_fire(self.owner);
-        self.tag_origin thread wager_scene_spinfast();
+        self.tag_origin thread wager_scene_spinfast(8);
         self.tag_origin thread playFXTimedOnTag(level._effect["character_fire_death_torso"], "tag_origin", 5);
         Earthquake(0.5, 3.0, self.origin, 256);
-        wait 4.75;
+        wait 3.75;
         self.challenge_playing = false;
         self.l_shotgun notify("stop_shooting");
         self.r_shotgun notify("stop_shooting");
@@ -459,11 +472,17 @@ do_wager_character_effects()
     self endon("disconnect");
     self endon("spawned_player");
     self endon("bled_out");
+    self thread wager_perk_monitor();
     while(true)
     {
         tier = self.wager_tier;
         if(isdefined(tier))
         {
+            if(tier >= 7)
+            {
+                self thread wager_fx_gm2();
+                self wager_gm2_rewards();
+            }
             if(tier >= 6)
             {
                 self thread wager_fx_gm1();
@@ -626,6 +645,10 @@ wager_show_self_items()
     {
         self.wager_master_fx SetInvisibleToPlayer(self, false);
     }
+    if(isdefined(self.wager_fx_gm2))
+    {
+        self.wager_fx_gm2 SetInvisibleToPlayer(self, false);
+    }
 }
 
 wager_fx_challenger_i()
@@ -698,6 +721,8 @@ wager_force_camo(weapon, camo = 0, swap = true)
 
 wager_gm1_rewards()
 {
+    self notify("wager_gm1_rewards");
+    self endon("wager_gm1_rewards");
     self endon("bled_out");
     self endon("disconnect");
     self endon("spawned_player");
@@ -718,6 +743,12 @@ wager_gm1_rewards()
             self SetWeaponAmmoClip(weapon, self GetWeaponAmmoClip(weapon) + 1);
         }
     }
+}
+
+wager_gm2_rewards()
+{
+    self setperk("specialty_unlimitedsprint");
+    self.wager_gm2_rewards = true;
 }
 
 wager_make_weapon(location, angles, weapon, options, owner)
@@ -831,11 +862,12 @@ wager_func_magicbox_weapon_spawned(box_weapon)
 }
 
 // awards a player the weapon provided given the same quality and AAT of their current weapon.
-wager_transfer_weapon_give(weapon)
+wager_transfer_weapon_give(weapon, from_weapon, current_aat, will_trade)
 {
     self endon("disconnect");
     self endon("bled_out");
     if(!isdefined(weapon) || weapon == level.weaponnone || (isdefined(level.zombie_powerup_weapon["minigun"]) && level.zombie_powerup_weapon["minigun"] == weapon)) return;
+    if(self is_in_altbody()) return;
     if(!zm_utility::is_player_valid(self)) return;
 
     self bgb::function_378bff5d();
@@ -846,8 +878,25 @@ wager_transfer_weapon_give(weapon)
         wait 0.25;
     }
 
-    cw = zm_weapons::get_nonalternate_weapon(self getCurrentWeapon());
-    if(zm_weapons::is_weapon_upgraded(cw))
+    if(isdefined(from_weapon))
+    {
+        cw = from_weapon;
+    }
+    
+    while(!isdefined(cw) || (isdefined(level.zombie_powerup_weapon["minigun"]) && level.zombie_powerup_weapon["minigun"] == cw))
+    {
+        cw = zm_weapons::get_nonalternate_weapon(self getCurrentWeapon());
+        wait 0.025;
+    }
+
+    primaryweapons = self getweaponslistprimaries();
+    weapon_limit = zm_utility::get_player_weapon_limit(self);
+    if(!isdefined(will_trade))
+    {
+        will_trade = (primaryweapons.size >= weapon_limit) && !zm_utility::is_offhand_weapon(cw);
+    }
+
+    if(will_trade && zm_weapons::is_weapon_upgraded(cw))
     {
         weapon_ug = zm_weapons::get_upgrade_weapon(weapon);
         if(isdefined(weapon_ug))
@@ -857,7 +906,7 @@ wager_transfer_weapon_give(weapon)
     }
 
     // swap aat from old weapon to new weapon
-    if(isdefined(cw) && isdefined(self.AAT[cw]))
+    if(will_trade && !isdefined(current_aat) && isdefined(self.AAT[cw]))
     {
         current_aat = self.AAT[cw];
         self.AAT[cw] = undefined;
@@ -877,17 +926,19 @@ wager_transfer_weapon_give(weapon)
             self zm_weapons::weapon_give(weapon, 0, 0, 1, 0);
         break;
         default:
-            primaryweapons = self getweaponslistprimaries();
-            weapon_limit = zm_utility::get_player_weapon_limit(self);
-            if(primaryweapons.size >= weapon_limit && !zm_utility::is_offhand_weapon(cw))
+            if(will_trade)
             {
                 self takeweapon(cw);
             }
             weapon = self zm_weapons::give_build_kit_weapon(weapon);
             self switchToWeapon(weapon);
             self givestartammo(weapon);
-            wait 0.1;
-            GiveAAT(self, current_aat, false, weapon);
+            self playsoundtoplayer("zmb_bgb_disorderly_weap_switch", self);
+            if(will_trade && isdefined(current_aat))
+            {
+                wait 0.1;
+                GiveAAT(self, current_aat, false, weapon);
+            }
         break;
     }
 }
@@ -909,6 +960,15 @@ wager_gg_swap()
 {
     self endon("disconnect");
     self endon("bled_out");
+    self notify("wager_gg_swap");
+    self endon("wager_gg_swap");
+
+    self bgb::function_378bff5d();
+    self zm_bgb_disorderly_combat::function_8a5ef15f();
+    while(self isMeleeing())
+    {
+        wait 0.25;
+    }
 
     if(!isdefined(self.wager_gg_last))
     {
@@ -920,6 +980,12 @@ wager_gg_swap()
     }
 
     cw = zm_weapons::get_nonalternate_weapon(self getCurrentWeapon());
+
+    if(isdefined(level.zombie_powerup_weapon["minigun"]) && level.zombie_powerup_weapon["minigun"] == cw)
+    {
+        return;
+    }
+
     switch(true)
     {
         case zm_utility::is_hero_weapon(cw):
@@ -932,44 +998,7 @@ wager_gg_swap()
     }
 
     self.wager_gg_last = gettime();
-
-    // swap aat from old weapon to new weapon
-    if(isdefined(cw) && isdefined(self.AAT[cw]))
-    {
-        current_aat = self.AAT[cw];
-        self.AAT[cw] = undefined;
-    }
-
-    is_ug = zm_weapons::is_weapon_upgraded(cw);
-    w_weapon = self wager_get_rand_weap();
-
-    if(is_ug)
-    {
-        weapon_ug = zm_weapons::get_upgrade_weapon(w_weapon);
-        if(isdefined(weapon_ug))
-        {
-            w_weapon = weapon_ug;
-        }
-    }
-
-    self bgb::function_378bff5d();
-    self zm_bgb_disorderly_combat::function_8a5ef15f();
-    while(self isMeleeing())
-    {
-        wait 0.25;
-    }
-    primaryweapons = self getweaponslistprimaries();
-    weapon_limit = zm_utility::get_player_weapon_limit(self);
-    if(primaryweapons.size >= weapon_limit && !zm_utility::is_offhand_weapon(cw))
-    {
-        self takeweapon(cw);
-    }
-    self playsoundtoplayer("zmb_bgb_disorderly_weap_switch", self);
-    w_weapon = self zm_weapons::give_build_kit_weapon(w_weapon);
-    self switchtoweaponimmediate(w_weapon);
-    self givestartammo(w_weapon);
-    wait 0.1;
-    GiveAAT(self, current_aat, false, w_weapon);
+    self thread wager_transfer_weapon_give(self wager_get_rand_weap());
 }
 
 gums_present()
@@ -984,9 +1013,9 @@ wager_loadout_rounds()
 
 wager_loadout_rounds_activate()
 {
+    self util::waittill_any_timeout(5, "loadout_returned");
     list = self getweaponslistprimaries();
     aat_cache = [];
-    upgraded_cache = [];
     weapon_limit = zm_utility::get_player_weapon_limit(self);
     index = 0;
     foreach(cw in list)
@@ -994,41 +1023,60 @@ wager_loadout_rounds_activate()
         // swap aat from old weapon to new weapon
         if(isdefined(cw) && isdefined(self.AAT[cw]))
         {
-            upgraded_cache[index] = self.AAT[cw];
-            self.AAT[cw] = undefined;
+            aat_cache[index] = self.AAT[cw] + "";
         }
 
         is_ug = zm_weapons::is_weapon_upgraded(cw);
-        upgraded_cache[index] = is_ug;
-        self takeWeapon(cw);
         index++;
     }
 
     for(i = 0; i < weapon_limit; i++)
     {
-        w_weapon = self wager_get_rand_weap();
-        if(isdefined(upgraded_cache[i]) && upgraded_cache[i])
-        {
-            weapon_ug = zm_weapons::get_upgrade_weapon(w_weapon);
-            if(isdefined(weapon_ug))
-            {
-                w_weapon = weapon_ug;
-            }
-        }
-        w_weapon = self zm_weapons::give_build_kit_weapon(w_weapon);
-        self switchtoweaponimmediate(w_weapon);
-        self givestartammo(w_weapon);
-        if(isdefined(aat_cache[i]))
-        {
-            wait 0.1;
-            GiveAAT(self, aat_cache[i], false, w_weapon);
-        }
+        self thread wager_transfer_weapon_give(self wager_get_rand_weap(), list[i], aat_cache[i], true);
     }        
+}
+
+wager_get_random_weapons()
+{
+    if(isdefined(level.wager_weapons)) return level.wager_weapons;
+    level.wager_weapons = [];
+    foreach(wep in getarraykeys(level.zombie_weapons))
+    {
+        if(!isdefined(wep)) continue;
+        if(wager_exclude_weapon(wep)) continue;
+        level.wager_weapons[level.wager_weapons.size] = wep;
+    }
+    return level.wager_weapons;
+}
+
+wager_exclude_weapon(weapon)
+{
+    if(isdefined(weapon.isgrenadeweapon) && weapon.isgrenadeweapon)
+    {
+        return true;
+    }
+    if(isdefined(weapon.ismeleeweapon) && weapon.ismeleeweapon)
+    {
+        return true;
+    }
+    if(weapon.name == "none")
+    {
+        return true;
+    }
+    if(issubstr(weapon.name, "idgun") && weapon.name != "idgun_0")
+    {
+        return true;
+    }
+	if(isdefined(level.start_weapon) && level.start_weapon == weapon)
+	{
+		return true;
+	}
+	return false;
 }
 
 wager_get_rand_weap()
 {
-    weapons = arraycopy(level.var_8fcdc919);
+    weapons = arraycopy(wager_get_random_weapons());
     w_weapon = array::random(weapons);
     while(self zm_weapons::has_weapon_or_upgrade(w_weapon))
     {
@@ -1036,4 +1084,250 @@ wager_get_rand_weap()
         w_weapon = array::random(weapons);
     }
     return w_weapon;
+}
+
+wager_perk_lifetime()
+{
+    self endon("disconnect");
+    self.wager_perk_lifetime = [];
+    while(true)
+    {
+        if(self.sessionstate == "playing" && isdefined(self.perks_active)) 
+        {
+            foreach(perk in self.perks_active)
+            {
+                if(!isinarray(self.wager_perk_lifetime, perk))
+                {
+                    self thread wager_perk_watchtime(perk);
+                }
+            }
+            self.wager_perk_lifetime = arraycopy(self.perks_active);
+        }
+        result = self util::waittill_any_return("perk_acquired", "fake_death", "death", "player_downed", "perk_lost");
+    }
+}
+
+wager_perk_watchtime(perk)
+{
+    self notify("wager_" + perk);
+    self endon("wager_" + perk);
+    self endon(perk + "_stop");
+    self endon("disconnect");
+    self endon("fake_death");
+    self endon("bled_out");
+    self endon("spawned_player");
+
+    wait WAGER_GM2_PTIMER * 60;
+    self notify(perk + "_stop");
+}
+
+wager_perk_toggler()
+{
+    self.wager_perk_toggler = true;
+}
+
+wager_perk_monitor()
+{
+    self endon("bled_out");
+    self endon("disconnect");
+    self endon("spawned_player");
+
+    while(true)
+    {
+        self waittill("perk_acquired");
+        if(isdefined(self.no_wpm) && self.no_wpm)
+        {
+            // prevents back and forth swapping forever
+            continue;
+        }
+        if(!isdefined(self.perk_history) || self.perk_history.size < 1)
+        {
+            continue;
+        }
+        foreach(player in level.players)
+        {
+            if(player.sessionstate != "playing")
+            {
+                continue;
+            }
+            if(player == self)
+            {
+                continue;
+            }
+            if(isdefined(player.wager_perk_toggler) && player.wager_perk_toggler)
+            {
+                perk = self.perk_history[self.perk_history.size - 1];
+                if(player hasperk(perk))
+                {
+                    player notify(perk + "_stop");
+                }
+                else
+                {
+                    player.no_wpm = true;
+                    player zm_perks::give_perk(perk, false);
+                    player.no_wpm = false;
+                }
+            }
+        }
+    }
+}
+
+wager_bgb_pack_cycle()
+{
+    self endon("disconnect");
+    while(true)
+    {
+        wait 1;
+        if(!isdefined(self.var_8414308a) || !isdefined(self.var_98ba48a2))
+        {
+            continue;
+        }
+        if(self.var_8414308a.size != self.var_98ba48a2.size)
+        {
+            self.var_8414308a = array::randomize(self.var_98ba48a2);
+        }
+    }
+}
+
+wager_perk_disabler()
+{
+    self.wager_perk_disabler = true;
+}
+
+wager_disable_perks()
+{
+    self endon("disconnect");
+    self endon("bled_out");
+    self endon("spawned_player");
+    if(!isdefined(self.perks_active))
+    {
+        return;
+    }
+    foreach(perk in self.perks_active)
+    {
+        self thread player_perk_pause(perk, PERK_PAUSE_TIME);
+    }
+}
+
+player_perk_pause(perk, time = 1)
+{
+    self notify("player_perk_pause_" + perk);
+    self endon("player_perk_pause_" + perk);
+    self endon(perk + "_stop");
+    self endon("disconnect");
+    self endon("fake_death");
+    self endon("bled_out");
+    self endon("spawned_player");
+
+    if(!isdefined(self.disabled_perks))
+    {
+        self.disabled_perks = [];
+    }
+    self.disabled_perks[perk] = (isdefined(self.disabled_perks[perk]) && self.disabled_perks[perk]) || self hasperk(perk);
+    if(!self.disabled_perks[perk])
+    {
+        return;
+    }
+    self unsetperk(perk);
+    self zm_perks::set_perk_clientfield(perk, 0);
+    if(isdefined(level._custom_perks[perk]) && isdefined(level._custom_perks[perk].player_thread_take))
+    {
+        self thread [[level._custom_perks[perk].player_thread_take]](1);
+    }
+    wait time;
+    self player_perk_unpause(perk);
+}
+
+player_perk_unpause(perk)
+{
+    if(!isdefined(perk))
+	{
+		return;
+	}
+    if(isdefined(self.disabled_perks) && (isdefined(self.disabled_perks[perk]) && self.disabled_perks[perk]))
+    {
+        self.disabled_perks[perk] = 0;
+        self zm_perks::set_perk_clientfield(perk, 1);
+        self setperk(perk);
+        if(isdefined(level._custom_perks[perk]) && isdefined(level._custom_perks[perk].player_thread_give))
+        {
+            self thread [[level._custom_perks[perk].player_thread_give]]();
+        }
+    }
+}
+
+wager_fx_gm2()
+{
+    self endon("disconnect");
+    self endon("bled_out");
+    self endon("spawned_player");
+
+    if(isdefined(self.wager_fx_gm2))
+    {
+        self.wager_fx_gm2 delete();
+    }
+
+    self.wager_fx_gm2 = spawn("script_model", self getTagOrigin("j_spineupper"));
+    self.wager_fx_gm2 setmodel("zombie_pickup_perk_bottle");
+    self.wager_fx_gm2 setscale(2);
+    self.wager_fx_gm2 enableLinkTo();
+    self.wager_fx_gm2 linkto(self, "j_spineupper", (12,-10,0), (90,0,0));
+    self.wager_fx_gm2 SetInvisibleToPlayer(self, true);
+    self.wager_fx_gm2 thread fx_kill_on_death_or_disconnect(self); 
+    self.wager_fx_gm2 thread wager_fx_shoot_bottles(self);
+
+    while(true)
+    {
+        while(!self isMeleeing())
+        {
+            wait 0.025;
+        }
+        wait 0.1;
+        wpn = get_rand_perk_bottle();
+        if(!isdefined(wpn)) break;
+        if(isdefined(self.wgm2_mdl))
+        {
+            self.wgm2_mdl delete();
+        }
+        self.wgm2_mdl = self wager_make_weapon(self getTagOrigin("tag_weapon_left"), (0,0,0), wpn, self calcweaponoptions(0, 0, 0), self);
+        self.wgm2_mdl setscale(2);
+        self.wgm2_mdl physicsLaunch(self.wgm2_mdl.origin, vectorscale(anglesToForward(self getPlayerAngles()), 100));
+        while(self isMeleeing())
+        {
+            wait 0.025;
+        }
+    }
+}
+
+wager_fx_shoot_bottles(owner)
+{
+    self endon("death");
+    owner endon("disconnect");
+    owner endon("bled_out");
+
+    while(true)
+    {
+        if(isdefined(self.wgm2_mdl2))
+        {
+            self.wgm2_mdl2 delete();
+        }
+        self.wgm2_mdl2 = spawn("script_model", self.origin);
+        self.wgm2_mdl2 setmodel("zombie_pickup_perk_bottle");
+        self.wgm2_mdl2 setscale(1.25);
+        self.wgm2_mdl2 thread fx_kill_on_death_or_disconnect(owner); 
+        v_target = (self.wgm2_mdl2.origin[0] + randomFloatRange(-15, 15), self.wgm2_mdl2.origin[1] + randomFloatRange(-15, 15), self.wgm2_mdl2.origin[2] + 100);
+        a_target = anglesToForward(vectortoangles(v_target - self.wgm2_mdl2.origin));
+        self.wgm2_mdl2 physicsLaunch(self.wgm2_mdl2.origin, vectorscale(a_target, 15));
+        wait randomFloatRange(3, 6);
+    }
+}
+
+get_rand_perk_bottle()
+{
+    rng = array::random(level._custom_perks);
+    if(!isdefined(rng))
+    {
+        return undefined;
+    }
+    return rng.perk_bottle_weapon;
 }

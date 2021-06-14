@@ -209,6 +209,7 @@ show_briefly(showtime)
 	self.show_for_time = showtime;
 	self setvisibletoall();
     self in_plain_sight_effect(false);
+    playsoundatposition("evt_appear_3d", self.origin);
 	while(self.show_for_time > 0)
 	{
 		self.show_for_time = self.show_for_time - 0.05;

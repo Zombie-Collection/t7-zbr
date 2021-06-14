@@ -319,13 +319,13 @@ bgb_kt_activate()
 	{
 		if(player.sessionstate != "playing") continue;
 		if(player == self) continue;
-		player thread bgb_kt_freeze();
+		player thread bgb_kt_freeze(self);
 	}
 	self zm_bgb_killing_time::activation();
 	level notify("kt_end");
 }
 
-bgb_kt_freeze()
+bgb_kt_freeze(attacker)
 {
 	self endon("disconnect");
 	self.bgb_kt_frozen = true;
@@ -333,6 +333,11 @@ bgb_kt_freeze()
 	level waittill("kt_end");
 	self.bgb_kt_frozen = false;
 	self bgb_freeze_player(false);
+	if(isdefined(self.bgb_kt_marked) && self.bgb_kt_marked)
+	{
+		self dodamage(int(self.maxhealth * BGB_KILLINGTIME_MARKED_PCT), self.origin, attacker, undefined, "none", "MOD_UNKNOWN", 0, level.weaponnone);
+	}
+	self.bgb_kt_marked = false;
 }
 
 bgb_freeze_player(result)
@@ -347,7 +352,10 @@ bgb_freeze_player(result)
 		self.freeze_obj = spawn("script_origin", self.origin);
 		self linkTo(self.freeze_obj);
 	}
-	else self unlink();
+	else 
+	{
+		self unlink();
+	}
 	self freezeControls(result);
 	self setentitypaused(result);
 	self.bgb_frozen = result;

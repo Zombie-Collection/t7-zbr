@@ -105,6 +105,7 @@ powerup_grab_get_players_override()
         if(!isdefined(player.team) || player.team == level.zombie_team) continue;
         if(isdefined(player.no_grab_powerup) && player.no_grab_powerup) continue;
 		if(isdefined(player.wager_powerups) && player.wager_powerups) continue;
+		if(player is_in_altbody()) continue;
         final[final.size] = player;
         if(isalive(player.var_4bd1ce6b))
 		{

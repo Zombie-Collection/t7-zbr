@@ -124,6 +124,7 @@ apply_lighting(setting = 0)
 setup_environment()
 {
     #region Bool
+    level.player_too_many_weapons_monitor = false;
     level.b_allow_idgun_pap = true;
     level.force_solo_quick_revive = true;
     level.pack_a_punch.grabbable_by_anyone = true;
@@ -140,6 +141,10 @@ setup_environment()
     #endregion
 
     #region Scalar
+    level.max_astro_zombies = 0;
+    level.astro_round_start = 999;
+    level.next_astro_round = 999;
+    level.zombies_left_before_astro_spawn = 0x7FFFFFFF;
     level.perk_purchase_limit = 99;
     level._random_zombie_perk_cost = 1500;
     level.chest_moves = 1; // allows firesales to be dropped by the game
@@ -317,9 +322,12 @@ apply_powerup_changes()
 
 apply_perk_changes()
 {
-    level.zombie_vars["zombie_perk_juggernaut_health"] = undefined; // should make jugg not affect health whatsoever
+    // should make jugg not affect health whatsoever
+    level.zombie_vars["zombie_perk_juggernaut_health"] = undefined;
+    level._custom_perks["specialty_armorvest"].player_thread_take = undefined;
+    level._custom_perks["specialty_armorvest"].player_thread_give = undefined;
     level.armorvest_reduction = max(min(PERK_JUGGERNAUT_REDUCTION, 1), 0);
-
+    
     if(isdefined(level.perk_damage_override) && level.perk_damage_override.size > 0)
     {
         level.perk_damage_override = [serious::widows_wine_damage_callback];
@@ -629,6 +637,8 @@ GMSpawned()
     self endon("bled_out");
     self endon("spawned_player");
     
+    playsoundatposition("evt_appear_3d", self.origin);
+	playsoundatposition("zmb_zombie_spawn", self.origin);
     self apply_spawn_cleanup();
     self zm_cosmodrome_spawn_fix();
     self apply_pre_delay_spawn_variables();
@@ -1167,6 +1177,7 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
 
         self.last_player_attacker = undefined;
         self.last_player_attack = undefined;
+
         if(!isdefined(self.hitbuffer))
             self.hitbuffer = 0;
 
@@ -1204,6 +1215,11 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
             target = int(min(100, result));
         }
 
+        if(isdefined(self.wager_perk_disabler) && self.wager_perk_disabler)
+        {
+            self thread wager_disable_perks();
+        }
+
         result = target;
     }
 
@@ -1237,6 +1253,19 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
         if(isdefined(attacker.wager_pvp_melee_damage) && isdefined(sMeansOfDeath) && sMeansOfDeath == "MOD_MELEE") return 0;
         if(attacker laststand::player_is_in_laststand() && !(attacker bgb::is_enabled("zm_bgb_self_medication"))) return 0;
         if(!isDefined(weapon)) weapon = attacker getCurrentWeapon();
+
+        if(isdefined(self.bgb_kt_frozen) && self.bgb_kt_frozen)
+        {
+            self.bgb_kt_marked = true;
+            damageStage = attacker _damage_feedback_get_stage(self, result);
+            if(isdefined(attacker.hud_damagefeedback))
+            {
+                attacker.hud_damagefeedback.color = (self.health - result > 0)? self GM_GetPlayerColor(true): (1,1,1);
+            }
+            attacker PlayHitMarker("mpl_hit_alert", damageStage, undefined, damagefeedback::damage_feedback_get_dead(self, smeansOfDeath, weapon, damageStage));
+            attacker thread _damage_feedback_growth(self, sMeansOfDeath, weapon, result);
+            return 0;
+        }
 
         if(isdefined(sMeansOfDeath) && sMeansOfDeath != "MOD_UNKNOWN")
             result += result * level.player_weapon_boost;
@@ -2251,6 +2280,7 @@ GiveCatalystLoadout()
             break;
         }
     }
+    self notify("loadout_returned");
 }
 
 GiveAAT(player, aat, print=true, weapon)
@@ -2267,6 +2297,27 @@ GiveAAT(player, aat, print=true, weapon)
 
 PlayerDownedCallback(eInflictor, eAttacker, iDamage, sMeansOfDeath, weapon, vDir, sHitLoc, psOffsetTime, deathAnimDuration)
 {
+    if(isdefined(eattacker) && isplayer(eattacker) && eattacker != self)
+    {
+        if(eAttacker.sessionstate == "playing" && isdefined(eattacker.wager_gm2_rewards) && eattacker.wager_gm2_rewards)
+        {
+            if(isdefined(self.perks_active))
+            {
+                foreach(perk in self.perks_active)
+                {
+                    if(eattacker hasPerk(perk))
+                    {
+                        if(isdefined(eattacker.wager_perk_lifetime))
+                        {
+                            eattacker thread wager_perk_watchtime(perk); // reset the timer on losing this perk
+                        }
+                        continue;
+                    }
+                    eattacker thread zm_perks::give_perk(perk, false);
+                }
+            }
+        }
+    }
     if(self hasperk("specialty_quickrevive") || self bgb::is_enabled("zm_bgb_self_medication") || 
         self bgb::is_enabled("zm_bgb_phoenix_up") || self bgb::is_enabled("zm_bgb_coagulant"))
     {

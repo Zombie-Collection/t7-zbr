@@ -90,6 +90,10 @@ bgb_trigger_visible_to_player(player)
 	{
 		visible = false;
 	}
+	if(player is_in_altbody())
+	{
+		return false;
+	}
 	if(!visible)
 	{
 		return false;
@@ -179,6 +183,10 @@ boxstub_update_prompt(player)
 	{
 		return false;
 	}
+	if(player is_in_altbody())
+	{
+		return false;
+	}
 	if(isdefined(level.func_magicbox_update_prompt_use_override))
 	{
 		if([[level.func_magicbox_update_prompt_use_override]]())
@@ -226,6 +234,10 @@ box_trigger_visible_to_player(player)
 		visible = false;
 	}
 	if(player bgb::is_enabled("zm_bgb_disorderly_combat"))
+	{
+		visible = false;
+	}
+	if(player is_in_altbody())
 	{
 		visible = false;
 	}
@@ -358,6 +370,10 @@ perk_random_machine_stub_update_prompt(player)
 	{
 		return false;
 	}
+	if(player is_in_altbody())
+	{
+		return false;
+	}
 	self.hint_parm1 = undefined;
 	n_power_on = is_rng_perk_power_on(self.stub.script_int);
 	if(!n_power_on)
@@ -437,6 +453,10 @@ random_perk_trigger_visible_to_player(player)
 	else if(!player can_buy_rng_perk())
 	{
 		visible = false;
+	}
+	if(player is_in_altbody())
+	{
+		return false;
 	}
 	if(!visible)
 	{
