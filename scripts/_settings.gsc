@@ -717,7 +717,7 @@
 
 // Bots will spawn with this level of wager tier completed automatically.
 // default value: 0
-#define DEBUG_WAGER_FX = 7;
+#define DEBUG_WAGER_FX = 0;
 
 // When true, bots may not move
 // default value: false

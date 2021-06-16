@@ -324,9 +324,17 @@ apply_perk_changes()
 {
     // should make jugg not affect health whatsoever
     level.zombie_vars["zombie_perk_juggernaut_health"] = undefined;
-    level._custom_perks["specialty_armorvest"].player_thread_take = undefined;
-    level._custom_perks["specialty_armorvest"].player_thread_give = undefined;
+    if(isdefined(level._custom_perks["specialty_armorvest"]))
+    {
+        level._custom_perks["specialty_armorvest"].player_thread_take = undefined;
+        level._custom_perks["specialty_armorvest"].player_thread_give = undefined;
+    }
     level.armorvest_reduction = max(min(PERK_JUGGERNAUT_REDUCTION, 1), 0);
+
+    if(isdefined(level._custom_perks["specialty_quickrevive"]))
+    {
+        level._custom_perks["specialty_quickrevive"].player_thread_give = serious::quick_revive_fix;
+    }
     
     if(isdefined(level.perk_damage_override) && level.perk_damage_override.size > 0)
     {
@@ -2280,6 +2288,15 @@ GiveCatalystLoadout()
             break;
         }
     }
+
+    if(self getWeaponsListPrimaries().size < 1)
+    {
+        wpn = (level.round_number < 10) ? getweapon("ar_accurate") : getweapon("ar_accurate_upgraded");
+        self giveWeapon(wpn);
+        self giveMaxAmmo(wpn);
+        self switchToWeapon(wpn);
+    }
+
     self notify("loadout_returned");
 }
 
@@ -3156,5 +3173,13 @@ zm_round_failsafe()
             wait 25;
         }
         wait 5;
+    }
+}
+
+quick_revive_fix()
+{
+    if(zm_perks::use_solo_revive())
+    {
+        self.lives = 1;
     }
 }

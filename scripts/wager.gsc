@@ -1138,25 +1138,29 @@ wager_perk_monitor()
         if(isdefined(self.no_wpm) && self.no_wpm)
         {
             // prevents back and forth swapping forever
+            wait 0.025;
             continue;
         }
-        if(!isdefined(self.perk_history) || self.perk_history.size < 1)
+        if(!isdefined(self.perks_active) || self.perks_active.size < 1)
         {
+            wait 0.025;
             continue;
         }
         foreach(player in level.players)
         {
             if(player.sessionstate != "playing")
             {
+                wait 0.025;
                 continue;
             }
             if(player == self)
             {
+                wait 0.025;
                 continue;
             }
             if(isdefined(player.wager_perk_toggler) && player.wager_perk_toggler)
             {
-                perk = self.perk_history[self.perk_history.size - 1];
+                perk = self.perks_active[self.perks_active.size - 1];
                 if(player hasperk(perk))
                 {
                     player notify(perk + "_stop");
@@ -1165,6 +1169,7 @@ wager_perk_monitor()
                 {
                     player.no_wpm = true;
                     player zm_perks::give_perk(perk, false);
+                    wait 0.025;
                     player.no_wpm = false;
                 }
             }
@@ -1258,6 +1263,8 @@ player_perk_unpause(perk)
 
 wager_fx_gm2()
 {
+    self notify("wager_fx_gm2");
+    self endon("wager_fx_gm2");
     self endon("disconnect");
     self endon("bled_out");
     self endon("spawned_player");
@@ -1291,7 +1298,7 @@ wager_fx_gm2()
         }
         self.wgm2_mdl = self wager_make_weapon(self getTagOrigin("tag_weapon_left"), (0,0,0), wpn, self calcweaponoptions(0, 0, 0), self);
         self.wgm2_mdl setscale(2);
-        self.wgm2_mdl physicsLaunch(self.wgm2_mdl.origin, vectorscale(anglesToForward(self getPlayerAngles()), 100));
+        self.wgm2_mdl physicsLaunch(self.wgm2_mdl.origin, vectorscale(anglesToForward(self getPlayerAngles()), 50));
         while(self isMeleeing())
         {
             wait 0.025;
