@@ -82,7 +82,13 @@ aat_deadwire(death, attacker, mod, weapon)
             if(player.sessionstate != "playing") continue;
             if(player == attacker) continue;
             if(distance2d(player.origin, self.origin) < 300)
-                player arc_damage_ent(attacker, 1, level.zm_aat_dead_wire_lightning_chain_params);
+			{
+				if(!BulletTracePassed(self geteye(), player geteye(), true, player))
+				{
+					continue;
+				}
+				player arc_damage_ent(attacker, 1, level.zm_aat_dead_wire_lightning_chain_params);
+			} 
         }
     }
     else
@@ -105,6 +111,7 @@ aat_blast_furnace(death, e_attacker, mod, w_weapon)
     {
         if(player == e_attacker) continue;
         if(player.sessionstate != "playing") continue;
+		if(!BulletTracePassed(self geteye(), player geteye(), true, player)) continue;
         player thread blast_furnace_player_burn(e_attacker, w_weapon);
     }
     self zm_aat_blast_furnace::result(death, e_attacker, mod, w_weapon);
@@ -158,7 +165,10 @@ thunderwall_result(death, attacker, mod, weapon)
 
 fw_validator()
 {
-    if(isplayer(self)) return true;
+    if(isplayer(self))
+	{
+		return true;
+	}
 	if(isdefined(self.barricade_enter) && self.barricade_enter)
 	{
 		return false;
@@ -197,13 +207,26 @@ fw_result(death, e_player, mod, w_weapon)
 	mdl_weapon moveto(v_firing_pos, 0.5);
 	mdl_weapon waittill("movedone");
 
-    a_ai_zombies = getaiteamarray("axis");
+    a_ai_zombies = getaiteamarray(level.zombie_team);
     a_players = getplayers();
     arrayremovevalue(a_players, e_player, false);
+	foreach(player in level.players)
+	{
+		if(player.team == e_player.team)
+		{
+			arrayremovevalue(a_players, player, false);
+			continue;
+		}
+		if(player.sessionstate != "playing")
+		{
+			arrayremovevalue(a_players, player, false);
+			continue;
+		}
+	}
     a_ai_zombies = ArrayCombine(a_ai_zombies, a_players, 0, 0);
     a_ai_zombies = array::get_all_closest(v_target_zombie_origin, a_ai_zombies);
-
-	for(i = 0; i < 10; i++)
+	n_shotatplayer = 0;
+	for(i = 0; i < 20; i++)
 	{
         los_checks = 0;
         for(j = 0; j < a_ai_zombies.size; j++)
@@ -220,7 +243,24 @@ fw_result(death, e_player, mod, w_weapon)
         }
 
         if(!isdefined(zombie) && a_ai_zombies.size) zombie = a_ai_zombies[0];
-        if(isdefined(zombie)) arrayremovevalue(a_ai_zombies, zombie, false);
+        if(isdefined(zombie))
+		{
+			if(isplayer(zombie))
+			{
+				if(zombie.sessionstate != "playing" || n_shotatplayer > 2)
+				{
+					n_shotatplayer = 0;
+					arrayremovevalue(a_ai_zombies, zombie, false);
+					i--;
+					continue;
+				}
+				n_shotatplayer++;
+			}
+			else
+			{
+				arrayremovevalue(a_ai_zombies, zombie, false);
+			}
+		}
 		if(!isdefined(zombie))
 		{
 			v_curr_yaw = (0, randomintrange(0, 360), 0);

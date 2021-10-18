@@ -107,9 +107,9 @@ shrink_me(b_upgraded, e_attacker)
     }
     
     self util::waittill_any_timeout(SHRINK_RAY_SHRINK_TIME, "kicked");
-    if(self.shrink_kicked)
+    if(am_i_shrink_kicked())
     {
-        self dodamage(int(self.health * 0.5), self.origin, self.shrink_killer, undefined, "none", "MOD_IMPACT", 0, level.weaponnone);
+        self dodamage(int(self.health * 0.5), self.origin, self.shrink_killer, undefined, "none", "MOD_UNKNOWN", 0, level.weaponnone);
         wait 1;
         self.shrink_kicked = false;
     }
@@ -128,6 +128,11 @@ shrink_me(b_upgraded, e_attacker)
     self set_move_speed_scale(1);
     self enableWeapons();
     self notify("unshrink");
+}
+
+am_i_shrink_kicked()
+{
+	return isdefined(self.shrink_kicked) && self.shrink_kicked;
 }
 
 kill_shrink_on_death(player)
@@ -162,9 +167,9 @@ watch_shrink_damage(e_player)
     while(isdefined(self))
     {
         self waittill("damage", damagetaken, attacker, dir, point, dmg_type, model, tag, part, weapon, flags);
-        self.health += damagetaken;
+        self.health += int(damagetaken);
         self.attacker = attacker;
-        self.owning_player dodamage(damagetaken, self.origin, self, self, "none", dmg_type, flags, weapon);
+        self.owning_player dodamage(int(damagetaken), self.origin, self, self, "none", dmg_type, flags, weapon);
     }
 }
 

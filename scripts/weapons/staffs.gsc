@@ -33,39 +33,10 @@ tomb_staffs_fix_persistence()
 
 kill_s_staff_weapon_tracker()
 {
-	/*
-	while(true)
-	{
-		util::wait_network_frame();
-		if(!isdefined(self.charger) || !isdefined(self.charger.is_charged))
-		{
-			continue;
-		}
-		if(!self.charger.is_charged)
-		{
-			continue;
-		}
-		break;
-	}
-	self thread no_track_staff_weapon_respawn();
-	*/
 }
 
 tomb_staff_notrack(player)
 {
-	/*
-	b_result = false;
-	if(isdefined(level._zombie_craftable_persistent_weapon))
-	{
-		b_result = [[ level._zombie_craftable_persistent_weapon ]](player);
-	}
-	if(!isdefined(self.stub.gm_fix))
-	{
-		self.stub.gm_fix = true;
-		self.stub thread no_track_staff_weapon_respawn();
-	}
-	return b_result;
-	*/
 }
 
 tomb_revive_staff_monitor()
@@ -85,23 +56,6 @@ tomb_revive_staff_monitor()
 
 no_track_staff_weapon_respawn()
 {
-	/*
-	self endon("death");
-	self notify("no_track_staff_weapon_respawn");
-	self endon("no_track_staff_weapon_respawn");
-	while(true)
-	{
-		str_name = "craftable_" + self.base_weaponname + "_zm";
-		model = getent(str_name, "targetname");
-		model show();
-		level flag::set(self.base_weaponname + "_zm_enabled");
-
-		self notify("kill_track_staff_weapon_respawn");
-		wait 0.25;
-		self waittill("kill_track_staff_weapon_respawn");
-		wait 0.25;
-	}
-	*/
 }
 
 monitor_fire_tomb()
@@ -476,7 +430,7 @@ ice_affect_zombie(str_weapon = getweapon("staff_water"), e_player, n_mod = 1)
 	n_damage = STAFF_WATER_DPS * level.round_number * 0.1;
 	if(str_weapon.name == "staff_water_upgraded" || str_weapon.name == "staff_water_upgraded2" || str_weapon.name == "staff_water_upgraded3")
 	{
-		n_damage *= 2;
+		n_damage *= 1.35;
 	}
 	else if(str_weapon.name == "one_inch_punch_ice")
 	{
@@ -718,11 +672,40 @@ staff_air_knockback(weapon, attacker)
     velocity = WIND_STAFF_LAUNCH_VELOCITY;
     angles = VectorNormalize(anglesToForward(attacker getPlayerAngles()));
     final_velocity = angles * velocity;
-    final_velocity_clamped = (final_velocity[0], final_velocity[1], min(max(final_velocity[2], 200), -200));
+    final_velocity_clamped = (final_velocity[0], final_velocity[1], min(max(final_velocity[2], 300), -300));
 
     self setOrigin(self getOrigin() + (0,0,10));
     self setVelocity(final_velocity_clamped);
 	self.launch_magnitude_extra = 200;
     self.v_launch_direction_extra = vectorNormalize(final_velocity_clamped);
     self thread TG_ImpactDamage(attacker);
+}
+
+get_staff_info_from_element_index(n_index)
+{
+	foreach(s_staff in level.a_elemental_staffs)
+	{
+		if(s_staff.enum == n_index)
+		{
+			return s_staff;
+		}
+	}
+	return undefined;
+}
+
+get_staff_info_from_weapon_name(w_weapon, b_base_info_only = 1)
+{
+	str_name = w_weapon.name;
+	foreach(var_b4ab863f, s_staff in level.a_elemental_staffs)
+	{
+		if(s_staff.weapname == str_name || s_staff.upgrade.weapname == str_name)
+		{
+			if(s_staff.charger.is_charged && !b_base_info_only)
+			{
+				return s_staff.upgrade;
+			}
+			return s_staff;
+		}
+	}
+	return undefined;
 }

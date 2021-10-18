@@ -57,13 +57,13 @@ ds_fling_player(player, w_weapon)
 	delay = self.var_d8486721;
 	if(isdefined(delay) && delay > 0.05) wait(delay);
 	if(self.sessionstate != "playing") return;
-	self dodamage(ZM_DRAGSHIELD_DMG * level.round_number, player.origin, player, player, "none", "MOD_BURNED", 0, w_weapon);
+	self dodamage(ZM_DRAGSHIELD_DMG * level.round_number, player.origin, player, player, "none", "MOD_EXPLOSIVE", 0, w_weapon);
 }
 
 ds_gib_player(player, w_weapon)
 {
     if(self.sessionstate != "playing") return;
-	self dodamage(ZM_DRAGSHIELD_DMG * level.round_number * 0.7, player.origin, player, player, "none", "MOD_BURNED", 0, w_weapon);
+	self dodamage(ZM_DRAGSHIELD_DMG * level.round_number * 0.7, player.origin, player, player, "none", "MOD_EXPLOSIVE", 0, w_weapon);
 }
 
 ds_net_throttle()

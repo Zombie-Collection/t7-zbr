@@ -89,15 +89,7 @@ acquire_vortex_and_watch_damage(w_weapon)
 			if(player.sessionstate != "playing") continue;
 			if(distancesquared(e_target_ball.origin, player.origin) <= n_radius_squared)
 			{
-				if(player.health > n_pulse_damage && (self.n_damage_type != 2))
-				{
-					player dodamage(n_pulse_damage, e_target_ball.origin, self, self, undefined, "MOD_UNKNOWN", 0, w_weapon);
-					continue;
-				}
-				if(self.n_damage_type == 2)
-				{
-					player dodamage(int(n_pulse_damage / 2 * level.round_number), e_target_ball.origin, self, self, undefined, "MOD_UNKNOWN", 0, w_weapon);
-				}
+				player dodamage(int(n_pulse_damage), e_target_ball.origin, self, self, undefined, "MOD_UNKNOWN", 0, w_weapon);
 			}
 		}
 		wait(0.5);

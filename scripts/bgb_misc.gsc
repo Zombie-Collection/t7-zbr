@@ -82,11 +82,22 @@ fix_bgb_pack()
 
 free_perk_override(player)
 {
-	free_perk = player zm_perks::give_random_perk();
-    if(isdefined(free_perk) && isdefined(level.perk_bought_func))
-    {
-        player [[level.perk_bought_func]](free_perk);
-    }
+	foreach(_player in level.players)
+	{
+		if(_player.sessionstate != "playing")
+		{
+			continue;
+		}
+		if(_player.team != player.team)
+		{
+			continue;
+		}
+		free_perk = _player zm_perks::give_random_perk();
+		if(isdefined(free_perk) && isdefined(level.perk_bought_func))
+		{
+			_player [[level.perk_bought_func]](free_perk);
+		}
+	}
 }
 
 bgb_fith_activate()
@@ -204,11 +215,14 @@ bgb_rr_activate()
 {
     level.var_dfd95560 = 1;
 	zm_bgb_round_robbin::function_8824774d(level.round_number + 1);
-	if(zm_utility::is_player_valid(self))
-    {
-        multiplier = zm_score::get_points_multiplier(self);
-        self zm_score::add_to_player_score(multiplier * 1600, 1, "gm_zbr_admin");
-    }
+	foreach(player in level.players)
+	{
+		if(zm_utility::is_player_valid(player) && player.team == self.team)
+		{
+			multiplier = zm_score::get_points_multiplier(player);
+			player zm_score::add_to_player_score(multiplier * 1600, 1, "gm_zbr_admin");
+		}
+	}
 }
 
 attempt_pop_shocks(target)
@@ -233,6 +247,7 @@ attempt_pop_shocks(target)
     foreach(enemy in level.players)
     {
         if(enemy == self) continue;
+		if(enemy.team == self.team) continue;
         if(enemy.sessionstate != "playing") continue;
         dist_sq = distancesquared(target.origin, enemy.origin + (0,0,50));
         if(dist_sq < 16384)
@@ -319,6 +334,7 @@ bgb_kt_activate()
 	{
 		if(player.sessionstate != "playing") continue;
 		if(player == self) continue;
+		if(player.team == self.team) continue;
 		player thread bgb_kt_freeze(self);
 	}
 	self zm_bgb_killing_time::activation();
@@ -332,16 +348,20 @@ bgb_kt_freeze(attacker)
 	self bgb_freeze_player(true);
 	level waittill("kt_end");
 	self.bgb_kt_frozen = false;
-	self bgb_freeze_player(false);
 	if(isdefined(self.bgb_kt_marked) && self.bgb_kt_marked)
 	{
+		self.bgb_frozen = false;
 		self dodamage(int(self.maxhealth * BGB_KILLINGTIME_MARKED_PCT), self.origin, attacker, undefined, "none", "MOD_UNKNOWN", 0, level.weaponnone);
+		self.bgb_frozen = true;
 	}
+	self bgb_freeze_player(false);
 	self.bgb_kt_marked = false;
 }
 
-bgb_freeze_player(result)
+// delay unset is the buffer window between unfreezing a player and removing their damage reduction
+bgb_freeze_player(result, delay_unset = 1)
 {
+	self notify("bgb_freeze_update");
 	if(result)
 	{
 		if(isdefined(self.freeze_obj))
@@ -349,16 +369,35 @@ bgb_freeze_player(result)
 			self unlink();
 			self.freeze_obj delete();
 		}
+		self freezeControls(true);
+		self setentitypaused(true);
+		self.bgb_freeze_dmg_protect = false;
+		self.bgb_frozen = true;
+		self setstance("stand");
+		self setvelocity((0,0,0));
+		wait 0.05;
 		self.freeze_obj = spawn("script_origin", self.origin);
-		self linkTo(self.freeze_obj);
+		self.freeze_obj.angles = self getPlayerAngles();
+		self linkto(self.freeze_obj);
 	}
 	else 
 	{
 		self unlink();
+		self.bgb_frozen = false;
+		self freezeControls(false);
+		self setentitypaused(false);
+		self thread bgb_unset_frozen_timed(delay_unset);
 	}
-	self freezeControls(result);
-	self setentitypaused(result);
-	self.bgb_frozen = result;
+}
+
+bgb_unset_frozen_timed(time)
+{
+	self endon("disconnect");
+	self endon("bgb_freeze_update");
+	self endon("bled_out");
+	self.bgb_freeze_dmg_protect = true;
+	wait time;
+	self.bgb_freeze_dmg_protect = false;
 }
 
 bgb_player_frozen()
@@ -374,6 +413,7 @@ check_player_fith(distance)
 	foreach(player in players)
 	{
 		if(player.sessionstate != "playing") continue;
+		if(player.team == self.team) continue;
 		player.should_bgb_freeze = true;
 		if(distance2dsquared(player.origin, self.origin) >= distance) player.should_bgb_freeze = false;
 		else a_p_tofreeze[a_p_tofreeze.size] = player;
@@ -479,6 +519,16 @@ bgb_profit_sharing_override(n_points, str_awarded_by, var_1ed9bd9b)
 			}
 		}
 	}
+	else if(isdefined(self.var_6638f10b) && self.var_6638f10b.size > 0)
+	{
+		foreach(e_player in self.var_6638f10b)
+		{
+			if(isdefined(e_player) && e_player.team == self.team)
+			{
+				e_player thread zm_score::add_to_player_score(n_points, 1, "zm_bgb_profit_sharing");
+			}
+		}
+	}
 	return n_points;
 }
 
@@ -569,7 +619,10 @@ bgb_get_poi_spawn()
 
 bgb_armamental_disable()
 {
-	self unsetperk("specialty_fastmeleerecovery");
+	if(!isdefined(self.wager_gm3_goldknife) || !self.wager_gm3_goldknife)
+	{
+		self unsetperk("specialty_fastmeleerecovery");
+	}
 	self unsetperk("specialty_fastequipmentuse");
 	self unsetperk("specialty_fasttoss");
 }
@@ -593,6 +646,7 @@ bgb_crawl_space_activate()
 	foreach(player in a_players)
 	{
 		if(player == self) continue;
+		if(player.team == self.team) continue;
 		if(player.sessionstate != "playing") continue;
 		if(distanceSquared(self.origin, player.origin) > 360000) continue;
 		player thread prone_for_time(BGB_CRAWL_SPACE_TIME);
@@ -679,6 +733,12 @@ spawn_extra_credit(origin)
 	self endon("bled_out");
 	powerup = zm_powerups::specific_powerup_drop("bonus_points_player", origin, undefined, undefined, 0.1);
 	powerup.bonus_points_powerup_override = serious::bgb_extra_credit_value;
+	level thread powerup_fixup(powerup);
+	return powerup;
+}
+
+powerup_fixup(powerup)
+{
 	wait(1);
 	if(isdefined(powerup) && (!powerup zm::in_enabled_playable_area() && !powerup zm::in_life_brush()))
 	{
@@ -787,4 +847,154 @@ bgb_unquenchable_event()
 		}
 		self zm_score::add_to_player_score(int(BGB_UNQUENCHABLE_CASHBACK_RD * level.round_number));
 	}
+}
+
+bgb_ips_activate()
+{
+	self endon("disconnect");
+	self SetInvisibleToAll();
+    self SetInvisibleToPlayer(self, false);
+	self thread show_owner_on_attack(self);
+	if(isdefined(self.invis_glow))
+    {
+        self.invis_glow delete();
+    }
+    self.invis_glow = spawn("script_model", self.origin);
+    self.invis_glow linkto(self);
+    self.invis_glow setmodel("tag_origin");
+    self.invis_glow thread clone_fx_cleanup(self.invis_glow);
+    playfxontag(level._effect["monkey_glow"], self.invis_glow, "tag_origin");
+	zm_bgb_in_plain_sight::activation();
+	self notify("show_owner");
+	self setvisibletoall();
+	if(isdefined(self.invis_glow))
+    {
+        self.invis_glow delete();
+    }
+	self show();
+	self thread delayed_deactivate_ips();
+}
+
+delayed_deactivate_ips()
+{
+	wait 2;
+	self stoploopsound(1);
+	self playsound("zmb_bgb_plainsight_end");
+	visionset_mgr::deactivate("visionset", "zm_bgb_in_plain_sight", self);
+	visionset_mgr::deactivate("overlay", "zm_bgb_in_plain_sight", self);
+}
+
+bgb_td_activate()
+{
+	if(!isdefined(level.bgb_td_pvp_prefix))
+	{
+		return;
+	}
+	self.__voiceprefix = self.voiceprefix;
+	self.voiceprefix = level.bgb_td_pvp_prefix;
+    level zm_audio::zmbaivox_playvox(self, "death_whimsy", 1, 10);
+	self.voiceprefix = self.__voiceprefix;
+}
+
+bgb_btd_enable()
+{
+	zm_bgb_board_to_death::enable();
+	self thread bgb_btd_enable_thread();
+}
+
+bgb_btd_enable_thread()
+{
+	self endon("disconnect");
+	self endon("bled_out");
+	self endon("bgb_update");
+	while(true)
+	{
+		self waittill("boarding_window", s_window);
+		self thread bgb_btd_explode(s_window);
+	}
+}
+
+bgb_btd_explode(s_window)
+{
+	wait(0.3);
+	a_ai = getplayers();
+	a_closest = arraysortclosest(a_ai, s_window.origin, a_ai.size, 0, 180);
+	for(i = 0; i < a_closest.size; i++)
+	{
+		if(a_closest[i] == self) continue;
+		if(a_closest[i].sessionstate != "playing") continue;
+		a_closest[i] dodamage(int(a_closest[i].health + 100), a_closest[i].origin, self, undefined, "none", "MOD_UNKNOWN", 0, level.weaponnone);
+		a_closest[i] playsound("zmb_bgb_boardtodeath_imp");
+		wait(randomfloatrange(0.05, 0.2));
+	}
+}
+
+bgb_umw_speedthread()
+{
+	self endon("bled_out");
+	self endon("disconnect");
+	self notify("bgb_umw_speedthread");
+	self endon("bgb_umw_speedthread");
+	if(!self bgb_opposing_umw())
+	{
+		return;
+	}
+	while(self bgb_opposing_umw())
+	{
+		self setMoveSpeedScale(0.5);
+		wait 1;
+	}
+	self update_gm_speed_boost(self, 1, true);
+}
+
+bgb_umw_enable()
+{
+	self __bgb_umw_enable();
+	foreach(player in level.players)
+	{
+		if(player.sessionstate != "playing") continue;
+		if(player == self) continue;
+		if(player.team == self.team) continue;
+		player thread bgb_umw_speedthread();
+	}
+}
+
+__bgb_umw_enable()
+{
+	self endon("disconnect");
+	self endon("bled_out");
+	self endon("bgb_update");
+	self thread __function_40e95c74();
+	if(bgb::function_f345a8ce("zm_bgb_undead_man_walking"))
+	{
+		return;
+	}
+	zm_bgb_undead_man_walking::function_b41dc007(1);
+	spawner::add_global_spawn_function(level.zombie_team, zm_bgb_undead_man_walking::function_f3d5076d);
+}
+
+__function_40e95c74()
+{
+	self util::waittill_any("disconnect", "bled_out", "bgb_update");
+	if(bgb::function_72936116("zm_bgb_undead_man_walking"))
+	{
+		return;
+	}
+	spawner::remove_global_spawn_function(level.zombie_team, zm_bgb_undead_man_walking::function_f3d5076d);
+	zm_bgb_undead_man_walking::function_b41dc007(0);
+}
+
+bgb_opposing_umw()
+{
+	foreach(player in level.players)
+	{
+		if(player == self) continue;
+		if(player.team == self.team) continue;
+		if(player.sessionstate != "playing") continue;
+		if(player bgb::is_enabled("zm_bgb_undead_man_walking"))
+		{
+			return true;
+		}
+	}
+	return false;
 }

@@ -20,7 +20,7 @@ initmaps()
     {
         while(!isdefined(level.gm_locked) || level.gm_locked) // this lock prevents async spawn operations from failing
         {
-            wait 0.025;
+            wait 0.05;
         }
         return;
     }
@@ -50,6 +50,11 @@ initmaps()
             level.gm_spawns[level.gm_spawns.size] = "zone_start";
             level.gm_spawns[level.gm_spawns.size] = "zone_canal_D";
             level.gm_spawns[level.gm_spawns.size] = "zone_theater_C";
+            level.gm_oob_monitors = [   
+                                        serious::zm_zod_oob_check1,
+                                        serious::zm_zod_oob_check2,
+                                        serious::zm_zod_oob_check3
+                                    ];
             thread zm_zod_pap();
             break;
 
@@ -65,7 +70,15 @@ initmaps()
             level.gm_spawns[level.gm_spawns.size] = "zone_start";
             level.gm_spawns[level.gm_spawns.size] = "zone_rooftop";
             level.gm_spawns[level.gm_spawns.size] = "zone_undercroft";
-            level.gm_spawns[level.gm_spawns.size] = "zone_great_hall";
+            level.gm_spawns[level.gm_spawns.size] = "zone_lower_courtyard_back";
+
+            level.gm_blacklisted[level.gm_blacklisted.size] = "zone_v10_pad";
+            level.gm_blacklisted[level.gm_blacklisted.size] = "zone_v10_pad_door";
+            level.gm_blacklisted[level.gm_blacklisted.size] = "zone_v10_pad_exterior";
+            level.gm_oob_monitors = [   
+                                        serious::zm_castle_oob_check1,
+                                        serious::zm_castle_oob_check2
+                                    ];
             thread zm_castle_pap();
             break;
 
@@ -85,6 +98,15 @@ initmaps()
 
             level.gm_blacklisted[level.gm_blacklisted.size] = "boss_arena_zone";
             level.gm_blacklisted[level.gm_blacklisted.size] = "pavlovs_B_zone";
+            level.gm_oob_monitors = [   
+                                        serious::zm_stalingrad_oob_check1,
+                                        serious::zm_stalingrad_oob_check2
+                                    ];
+            level.zbr_wager_exclude_weapons = [
+                                                getweapon("launcher_dragon_fire"),
+                                                getweapon("launcher_dragon_strike"),
+                                                getweapon("launcher_gauntlet_flamethrower")
+                                              ];
             thread zm_stalingrad_pap();
         break;
 
@@ -93,6 +115,8 @@ initmaps()
             level.gm_spawns[level.gm_spawns.size] = "zm_prison_mess_hall_zone";
             level.gm_spawns[level.gm_spawns.size] = "zm_asylum_kitchen2_zone";
             level.gm_spawns[level.gm_spawns.size] = "zm_theater_stage_zone";
+            
+            level.gm_blacklisted[level.gm_blacklisted.size] = "zm_prototype_outside_zone";
             thread zm_genesis_map();
             break;
 
@@ -126,6 +150,11 @@ initmaps()
             level.gm_spawns[level.gm_spawns.size] = "north_catwalk_zone3";
             level.gm_spawns[level.gm_spawns.size] = "storage_lander_zone";
             level.gm_spawns[level.gm_spawns.size] = "storage_zone2";
+            level.gm_oob_monitors = [   
+                                        serious::zm_cosmodrome_oob_check1, 
+                                        serious::zm_cosmodrome_oob_check2, 
+                                        serious::zm_cosmodrome_oob_check3 
+                                    ];
             thread zm_cosmodrome_pap();
         break;
 
@@ -134,6 +163,14 @@ initmaps()
             level.gm_spawns[level.gm_spawns.size] = "waterfall_lower_zone";
             level.gm_spawns[level.gm_spawns.size] = "cave_tunnel_zone";
             level.gm_spawns[level.gm_spawns.size] = "caves2_zone";
+
+            level.gm_oob_monitors = [   
+                                        serious::zm_temple_oob_check1,
+                                        serious::zm_temple_oob_check2,
+                                        serious::zm_temple_oob_check3,
+                                        serious::zm_temple_oob_check4,
+                                        serious::zm_temple_oob_check5
+                                    ];
             thread zm_temple_pap();
         break;
 
@@ -171,13 +208,30 @@ initmaps()
         return;
 
     level.gm_spawns = array::randomize(level.gm_spawns);
-    level.spawn_index = 0;
 }
 
 //should only be used at game start
 GetRandomMapSpawn(player, return_struct = false, ignore_poi = false)
 {
     initmaps();
+
+    player on_player_connect();
+
+    if(isdefined(player.gmspawn) && is_zbr_teambased())
+    {
+        teammates = player get_zbr_teammates(true);
+        if(isdefined(teammates) && isdefined(teammates.size) && teammates.size > 0)
+        {
+            if(isdefined(teammates[0].initial_spawn_fix) && teammates[0].initial_spawn_fix && !(isdefined(teammates[0].gm_in_combat) && teammates[0].gm_in_combat))
+            {
+                spawn = get_player_spawnable_point(teammates[0], return_struct, ignore_poi);
+                if(isdefined(spawn))
+                {
+                    return spawn;
+                }
+            }
+        }
+    }
 
     if(!ignore_poi && (isdefined(level.b_use_poi_spawn_system) && level.b_use_poi_spawn_system))
         return gm_select_poi_spawn(player, return_struct);
@@ -199,10 +253,67 @@ GetRandomMapSpawn(player, return_struct = false, ignore_poi = false)
     return spawn;
 }
 
-Try_Respawn()
+get_player_spawnable_point(player, return_struct = false, ignore_poi = false)
+{
+    if(!isdefined(player))
+    {
+        return undefined;
+    }
+    
+    // 1: check if poi spawns are enabled, if so, find one close to here
+    if(!ignore_poi && isdefined(level.b_use_poi_spawn_system) && level.b_use_poi_spawn_system)
+    {
+        gm_generate_poi_spawns();
+
+        v_closest = undefined;
+        n_closest = undefined;
+        foreach(v_spawn in level.a_v_poi_spawns)
+        {
+            n_dist = distance2d(v_spawn, player.origin);
+            if(!isdefined(n_closest) || n_closest > n_dist)
+            {
+                n_closest = n_dist;
+                v_closest = v_spawn;
+            }
+        }
+
+        if(isdefined(v_closest))
+        {
+            return return_struct ? gm_poi_get_best_spawn(v_closest) : v_closest;
+        }
+    }
+
+    // 2: if not, return a zone spawn in the same zone (if it exists)
+    zone = player zm_utility::get_current_zone(false);
+    if(isdefined(zone))
+    {
+        spawns = GetAllSpawnsFromZone(zone);
+        if(isdefined(spawns) && isdefined(spawns.size) && spawns.size > 0)
+        {
+            return return_struct ? gm_poi_get_best_spawn(spawns[0].origin) : spawns[0].origin;
+        }
+    }
+
+    // 3: finally, if still no spawn, return the player's origin, only if it is within the playable space
+    if(!zm_utility::check_point_in_playable_area(player getorigin()))
+    {
+        return GetGMSpawn(self, true, true);
+    }
+
+    return return_struct ? gm_poi_get_best_spawn(player getorigin()) : (player getorigin());
+}
+
+Try_Respawn(no_initial = false)
 {
     if(IS_DEBUG && DEBUG_REVERT_SPAWNS) return;
-    spawn = GetRandomMapSpawn(self);
+    if(no_initial)
+    {
+        spawn = GetGMSpawn(self, true).origin;
+    }
+    else
+    {
+        spawn = GetRandomMapSpawn(self);
+    }
     
     if(isdefined(spawn))
         self SetOrigin(spawn);
@@ -212,12 +323,16 @@ GetRandStartZone(player, return_struct)
 {
     if(!isdefined(level.gm_spawns))
         level.gm_spawns = [];
+
+    if(!isdefined(player.gm_id))
+    {
+        player on_player_connect();
+    }
     
     if(level.gm_spawns.size < 1 && !isdefined(player.gmspawn))
         return GetGMSpawn(player, return_struct, true);
     
-    spawn_zone = level.gm_spawns[level.spawn_index];
-    level.spawn_index = (level.spawn_index + 1) % level.gm_spawns.size;
+    spawn_zone = level.gm_spawns[player.gm_id % level.gm_spawns.size];
     player.gmspawn = spawn_zone;
     player.visited_zones = [];
 
@@ -229,6 +344,11 @@ GetAllSpawnsFromZone(player, zone)
     respawn_points = struct::get_array("player_respawn_point", "targetname");
     target_zone = level.zones[zone];
     target_point = undefined;
+
+    if(!isdefined(target_zone))
+    {
+        return [];
+    }
 
     final_array = [];
     foreach(point in respawn_points)
@@ -284,6 +404,7 @@ GetGMSpawn(player, return_struct, no_start = false)
             {
                 if(enemy == player) continue;
                 if(enemy.sessionstate != "playing") continue;
+                if(is_zbr_teambased() && (enemy.team == player.team)) continue;
                 spawn.score += int(min(distanceSquared(enemy.origin, spawn.origin), 10000000)); //dsqrd faster than d2d or d due to alg
             }
 
@@ -330,8 +451,15 @@ get_ideal_spawn_location(player, zone)
     // are there any players in this zone?
     players = zm_zonemgr::get_players_in_zone(zone, true);
     if(!isarray(players)) return undefined; // inactive zone
-    if(players.size > 0 && (players.size > 1 || players[0] != player))
-        return undefined;
+
+    if(players.size > 0)
+    {
+        foreach(plr in players)
+        {
+            if(is_zbr_teambased() && (plr.team == player.team)) continue;
+            return undefined;
+        }
+    }
     
     spawns = GetAllSpawnsFromZone(player, zone);
     if(!isdefined(spawns) || spawns.size < 1) return undefined;
@@ -343,7 +471,14 @@ get_ideal_spawn_location(player, zone)
         foreach(_player in level.players)
         {
             if(_player.sessionstate != "playing" || _player == player)
+            {
                 continue;
+            }
+            
+            if(is_zbr_teambased() && (_player.team == player.team))
+            {
+                continue;
+            }
             
             ent = BulletTrace(spawn.origin + (0,0,70), _player.origin + (0,0,70), true, undefined)["entity"];
             if(isdefined(ent) && ent == _player)
@@ -381,6 +516,7 @@ is_point_inside_zone(v_origin, target_zone)
 
 zm_zod_pap()
 {
+    level thread zm_zod_companion_monitor();
     level flag::wait_till("initial_blackscreen_passed"); //thx feb
     level.pack_a_punch_camo_index = 124; //fun
     if(isdefined(level.var_c0091dc4) && isdefined(level.var_c0091dc4["pap"]) && isdefined(level.var_c0091dc4["pap"].var_46491092))
@@ -451,6 +587,14 @@ zm_stalingrad_pap()
     level flag::set("dragon_gauntlet_acquired");
     level flag::set("dragon_strike_acquired");
 
+    level.zombie_include_weapons[getweapon("melee_sword")] = 1;
+    zm_weapons::add_zombie_weapon("melee_sword", "melee_sword", undefined, 950, undefined, undefined, 950, false, false, "");
+    level.zombie_include_weapons[getweapon("melee_sword")] = 1;
+
+    level.zombie_include_weapons[getweapon("melee_wrench")] = 1;
+    zm_weapons::add_zombie_weapon("melee_wrench", "melee_wrench", undefined, 950, undefined, undefined, 950, false, false, "");
+    level.zombie_include_weapons[getweapon("melee_wrench")] = 1;
+
     level.var_a78effc7 = 999; //fix stalingrad hang
     
     // disable drones
@@ -463,6 +607,18 @@ zm_stalingrad_pap()
     level flag::set("dragon_strike_quest_complete");
     if(IS_DEBUG && DEBUG_STALINGRAD_UG_DS) level flag::set("draconite_available");
 
+    thread zm_stalingrad_award_gauntlet();
+
+    // disable riding dragon
+    level.var_583e4a97.var_caa5bc3e = 999;
+}
+
+zm_stalingrad_award_gauntlet()
+{
+    while(level.round_number < DRAGON_GAUNTLET_UNLOCK_ROUND)
+    {
+        level waittill("between_round_over");
+    }
     level flag::set("dragon_egg_acquired");
 	level flag::set("egg_bathed_in_flame");
 	level flag::set("egg_cooled_hazard");
@@ -481,7 +637,7 @@ zm_stalingrad_pap()
 	level flag::clear("egg_placed_in_hazard");
 	level flag::clear("basement_sentinel_wait");
 	level flag::set("gauntlet_quest_complete");
-
+    
     foreach(player in level.players)
 	{
 		player flag::set("flag_player_completed_challenge_4");
@@ -572,6 +728,70 @@ _pap_brush_connect_paths()
 	self notsolid();
 }
 
+zm_quadrotor_init()
+{
+    self [[ level.old_quadrotor_init ]]();
+    self thread watch_for_owner_team();
+}
+
+watch_for_owner_team()
+{
+    self endon("death");
+    while(!isdefined(self.player_owner))
+    {
+        wait 0.1;
+    }
+    self.team = self.player_owner.team;
+	self.vteam = self.team;
+	self setteam(self.team);
+    self.maxhealth = int(level.round_number * 250);
+    self.health = int(self.maxhealth);
+    self setCanDamage(true);
+    self.dmg_trigger = spawn("trigger_damage", self.origin, 0, 32, 32);
+    self.dmg_trigger thread fakelinkto(self, (0,0,32));
+    self.dmg_trigger thread kill_dragon_trig_on_death(self);
+    self.dmg_trigger thread watch_quadrotor_damage(self, int(level.round_number * 250));
+}
+
+watch_quadrotor_damage(e_quad, health)
+{
+    e_quad endon("death");
+    self endon("death");
+    e_quad.maxhealth = health;
+    while(isdefined(self) && isdefined(e_quad))
+    {
+        self waittill("damage", damagetaken, attacker, dir, point, dmg_type, model, tag, part, weapon, flags);
+        if(e_quad == attacker) continue;
+        if(isdefined(attacker) && isplayer(attacker) && attacker.team != e_quad.team)
+        {
+            health -= damagetaken;
+            e_quad.health = health;
+            damageStage = dragon_damage_feedback_get_stage(e_quad);
+            attacker.hud_damagefeedback.color = (1,1,1);
+            attacker PlayHitMarker("mpl_hit_alert", damageStage, undefined, health <= 0);
+            attacker thread damagefeedback::damage_feedback_growth(e_quad, dmg_type, weapon);
+        }
+        if(health <= 0)
+        {
+            e_quad notify("death", attacker);
+            return;
+        }
+    }
+}
+
+quadrotor_cb_damage(einflictor, eattacker, idamage, idflags, smeansofdeath, weapon, vpoint, vdir, shitloc, vdamageorigin, psoffsettime, damagefromunderneath, modelindex, partname, vsurfacenormal)
+{
+    if(isdefined(eattacker) && isplayer(eattacker) && eattacker.team != self.team)
+    {
+        damageStage = dragon_damage_feedback_get_stage(self);
+        eattacker.hud_damagefeedback.color = (1,1,1);
+        eattacker PlayHitMarker("mpl_hit_alert", damageStage, undefined, damagefeedback::damage_feedback_get_dead(self, smeansofdeath, weapon, damageStage));
+        eattacker thread damagefeedback::damage_feedback_growth(self, smeansofdeath, weapon);
+        return idamage;
+    }
+	return 0;
+}
+
 zm_tomb_pap()
 {
     level flag::wait_till("initial_blackscreen_passed");
@@ -581,10 +801,13 @@ zm_tomb_pap()
     level.mechz_min_round_fq = 5;
 	level.mechz_max_round_fq = 6;
     level.a_e_slow_areas = [];
+    level.old_quadrotor_init = level.vehicle_main_callback["zm_quadrotor"];
+    level.vehicle_main_callback["zm_quadrotor"] = serious::zm_quadrotor_init;
     unlock_all_debris();
-    
+    open_all_doors();
+
     // power the generators permanently
-    level.zone_capture.spawn_func_recapture_zombie = ::killzomb_tomb;
+    level.zone_capture.spawn_func_recapture_zombie = serious::killzomb_tomb;
     level.total_capture_zones = 6;
 
     a_s_generator = struct::get_array("s_generator", "targetname");
@@ -695,11 +918,11 @@ zm_tomb_pap()
         }
     }
 
-    foreach(piece in level.zombie_include_craftables["equip_dieseldrone"].a_piecestubs)
-    {
-        piece.piecespawn.model.origin = (10000,10000,10000);
-        piece.piecespawn.origin = (10000,10000,10000);
-    }
+    // foreach(piece in level.zombie_include_craftables["equip_dieseldrone"].a_piecestubs)
+    // {
+    //     piece.piecespawn.model.origin = (10000,10000,10000);
+    //     piece.piecespawn.origin = (10000,10000,10000);
+    // }
 
     if(IS_DEBUG && DEBUG_OIP)
     {
@@ -731,6 +954,366 @@ zm_tomb_pap()
             level flag::set("charger_ready_" + i);
         }
     }
+
+    // override staff callbacks
+    level.custom_craftable_validation = serious::tomb_custom_craftable_validation;
+    level.zombie_craftable_persistent_weapon = serious::tomb_check_crafted_weapon_persistence;
+
+    foreach(staff in level.a_elemental_staffs)
+    {
+        e_staff_standard = get_staff_info_from_element_index(staff.enum);
+        e_staff_standard_upgraded = e_staff_standard.upgrade;
+        e_staff_standard_upgraded thread fix_other_calls_stwr();
+    }
+}
+
+tomb_teleport_penalty()
+{
+    self endon("disconnect");
+    self endon("bled_out");
+    self endon("spawned_player");
+    if(level.script != "zm_tomb")
+    {
+        return;
+    }
+    while(true)
+    {
+        if(isdefined(self.teleport_origin))
+        {
+            self.gm_objective_timesurvived = int(max(0, self.gm_objective_timesurvived - GM_TELEPORT_STRAT_PENALTY));
+            wait 6.25; // time of teleport
+        }
+        wait 0.25;
+    }
+}
+
+tomb_check_crafted_weapon_persistence(player)
+{
+    if
+    (
+        !(
+            self.stub.weaponname == level.a_elemental_staffs["staff_air"].w_weapon || 
+            self.stub.weaponname == level.a_elemental_staffs["staff_fire"].w_weapon || 
+            self.stub.weaponname == level.a_elemental_staffs["staff_lightning"].w_weapon || 
+            self.stub.weaponname == level.a_elemental_staffs["staff_water"].w_weapon
+        )
+    )
+    {
+        return false;
+    }
+	if(!(isdefined(level.var_b79a2c38[self.stub.equipname]) && level.var_b79a2c38[self.stub.equipname]))
+    {
+        level thread tomb_staff_pickup_cooldown(self.stub.equipname);
+        s_elemental_staff = get_staff_info_from_weapon_name(self.stub.weaponname, 0);
+        player zm_weapons::weapon_give(s_elemental_staff.w_weapon, 0, 0);
+        if(isdefined(s_elemental_staff.prev_ammo_stock) && isdefined(s_elemental_staff.prev_ammo_clip))
+        {
+            player setweaponammostock(s_elemental_staff.w_weapon, s_elemental_staff.prev_ammo_stock);
+            player setweaponammoclip(s_elemental_staff.w_weapon, s_elemental_staff.prev_ammo_clip);
+        }
+        if(isdefined(level.zombie_craftablestubs[self.stub.equipname].str_taken))
+        {
+            self.stub.hint_string = level.zombie_craftablestubs[self.stub.equipname].str_taken;
+        }
+        else
+        {
+            self.stub.hint_string = "";
+        }
+        self sethintstring(self.stub.hint_string);
+        str_name = "craftable_" + self.stub.weaponname.name + "_zm";
+        model = getent(str_name, "targetname");
+        model ghost();
+        self.stub thread tomb_track_crafted_staff_trigger();
+        self.stub thread track_staff_weapon_respawn(player);
+        set_player_staff(self.stub.weaponname, player);
+    }
+    else
+    {
+        self.stub.hint_string = "";
+        self sethintstring(self.stub.hint_string);
+    }
+    return true;
+}
+
+set_player_staff(staff, e_player)
+{
+	s_staff = get_staff_info_from_weapon_name(staff);
+	s_staff.e_owner = e_player;
+	n_player = e_player getentitynumber() + 1;
+	e_player.staff_enum = s_staff.enum;
+	level clientfield::set(s_staff.element + "_staff.holder", e_player.characterindex + 1);
+	e_player update_staff_accessories(s_staff.enum);
+}
+
+fix_other_calls_stwr()
+{
+    self notify("fix_other_calls_stwr");
+    self endon("fix_other_calls_stwr");
+    while(true)
+    {
+        self waittill("kill_track_staff_weapon_respawn");
+        waittillframeend;
+        wait 0.05;
+        self notify("kill_track_staff_weapon_respawn");
+        if(isdefined(self.owner))
+        {
+            self thread track_staff_weapon_respawn(self.owner);
+        }
+    }
+}
+
+track_staff_weapon_respawn(player)
+{
+    player endon("disconnect");
+	self notify("kill_track_staff_weapon_respawn_" + player.name);
+	self endon("kill_track_staff_weapon_respawn_" + player.name);
+    self thread fix_other_calls_stwr();
+	s_elemental_staff = undefined;
+	if(issubstr(self.targetname, "prop_"))
+	{
+		s_elemental_staff = get_staff_info_from_weapon_name(self.w_weapon, 1);
+	}
+	else
+	{
+		s_elemental_staff = get_staff_info_from_weapon_name(self.weaponname, 1);
+	}
+	s_upgraded_staff = s_elemental_staff.upgrade;
+	if(!isdefined(self.base_weaponname))
+	{
+		self.base_weaponname = s_elemental_staff.weapname;
+	}
+	// level flag::clear(self.base_weaponname + "_zm_enabled");
+	has_weapon = 0;
+	while(isalive(player))
+	{
+		if(isdefined(s_elemental_staff.charger.is_inserted) && s_elemental_staff.charger.is_inserted || (isdefined(s_upgraded_staff.charger.is_inserted) && s_upgraded_staff.charger.is_inserted) || (isdefined(s_upgraded_staff.ee_in_use) && s_upgraded_staff.ee_in_use))
+		{
+			has_weapon = 1;
+		}
+		else
+		{
+			weapons = player getweaponslistprimaries();
+			foreach(var_46fe82d7, weapon in weapons)
+			{
+				n_melee_element = 0;
+				if(weapon.name == self.base_weaponname)
+				{
+					s_elemental_staff.prev_ammo_stock = player getweaponammostock(weapon);
+					s_elemental_staff.prev_ammo_clip = player getweaponammoclip(weapon);
+					has_weapon = 1;
+				}
+				else if(weapon.name == s_upgraded_staff.weapname)
+				{
+					s_upgraded_staff.prev_ammo_stock = player getweaponammostock(weapon);
+					s_upgraded_staff.prev_ammo_clip = player getweaponammoclip(weapon);
+					has_weapon = 1;
+					n_melee_element = s_upgraded_staff.enum;
+				}
+				if(player hasweapon(level.var_2b2f83e5))
+				{
+					s_upgraded_staff.revive_ammo_stock = player getweaponammostock(level.var_2b2f83e5);
+					s_upgraded_staff.revive_ammo_clip = player getweaponammoclip(level.var_2b2f83e5);
+				}
+				if(has_weapon && (!(isdefined(player.one_inch_punch_flag_has_been_init) && player.one_inch_punch_flag_has_been_init)) && n_melee_element != 0 && !player hasperk("specialty_widowswine"))
+				{
+					cur_weapon = player getcurrentweapon();
+					if(cur_weapon != weapon && (isdefined(player.use_staff_melee) && player.use_staff_melee))
+					{
+						player update_staff_accessories(0);
+						continue;
+					}
+					if(cur_weapon == weapon && (!(isdefined(player.use_staff_melee) && player.use_staff_melee)))
+					{
+						player update_staff_accessories(n_melee_element);
+					}
+				}
+			}
+		}
+		if(!has_weapon && !player laststand::player_is_in_laststand())
+		{
+			break;
+		}
+		wait(0.5);
+		has_weapon = 0;
+	}
+	b_staff_in_use = 0;
+	a_players = getplayers();
+	foreach(var_c5db81b6, check_player in a_players)
+	{
+		if(check_player.sessionstate == "playing")
+		{
+			weapons = check_player getweaponslistprimaries();
+			foreach(var_d3a8ad26, weapon in weapons)
+			{
+				if(weapon.name == self.base_weaponname || weapon.name == s_upgraded_staff.weapname)
+				{
+					b_staff_in_use = 1;
+				}
+			}
+		}
+	}
+	if(!b_staff_in_use)
+	{
+		str_name = "craftable_" + self.base_weaponname + "_zm";
+		model = getent(str_name, "targetname");
+		model show();
+		// level flag::set(self.base_weaponname + "_zm_enabled");
+	}
+	if(isweapon(self.weaponname))
+	{
+		clear_player_staff(self.weaponname, player);
+	}
+	else
+	{
+		clear_player_staff(self.w_weapon, player);
+	}
+}
+
+clear_player_staff(staff, e_owner)
+{
+	s_staff = get_staff_info_from_weapon_name(staff);
+	if(isdefined(e_owner) && isdefined(s_staff.e_owner) && e_owner != s_staff.e_owner)
+	{
+		return;
+	}
+	if(!isdefined(e_owner))
+	{
+		e_owner = s_staff.e_owner;
+	}
+	if(isdefined(e_owner))
+	{
+		if(level clientfield::get(s_staff.element + "_staff.holder") == e_owner.characterindex + 1)
+		{
+			n_player = e_owner getentitynumber() + 1;
+			e_owner.staff_enum = 0;
+			level clientfield::set(s_staff.element + "_staff.holder", 0);
+			e_owner update_staff_accessories(0);
+		}
+	}
+	s_staff.e_owner = undefined;
+}
+
+update_staff_accessories(n_element_index)
+{
+	if(!(isdefined(self.one_inch_punch_flag_has_been_init) && self.one_inch_punch_flag_has_been_init) && !self hasperk("specialty_widowswine"))
+	{
+		cur_weapon = self zm_utility::get_player_melee_weapon();
+		weapon_to_keep = getweapon("knife");
+		self.use_staff_melee = 0;
+		if(n_element_index != 0)
+		{
+			staff_info = get_staff_info_from_element_index(n_element_index);
+			if(staff_info.charger.is_charged)
+			{
+				staff_info = staff_info.upgrade;
+			}
+			if(isdefined(staff_info.var_8f5a8751))
+			{
+				weapon_to_keep = staff_info.var_8f5a8751;
+				self.use_staff_melee = 1;
+			}
+		}
+		melee_changed = 0;
+		if(cur_weapon != weapon_to_keep)
+		{
+			self takeweapon(cur_weapon);
+			self giveweapon(weapon_to_keep);
+			self zm_utility::set_player_melee_weapon(weapon_to_keep);
+			melee_changed = 1;
+		}
+	}
+	has_revive = self hasweapon(level.var_2b2f83e5);
+	has_upgraded_staff = 0;
+	a_weapons = self getweaponslistprimaries();
+	staff_info = get_staff_info_from_element_index(n_element_index);
+	foreach(var_4878f495, str_weapon in a_weapons)
+	{
+		if(is_weapon_upgraded_staff(str_weapon))
+		{
+			has_upgraded_staff = 1;
+		}
+	}
+	if(has_revive && !has_upgraded_staff)
+	{
+		self setactionslot(3, "altmode");
+		self takeweapon(level.var_2b2f83e5);
+	}
+	else if(!has_revive && has_upgraded_staff)
+	{
+		self setactionslot(3, "weapon", level.var_2b2f83e5);
+		self giveweapon(level.var_2b2f83e5);
+		if(isdefined(staff_info))
+		{
+			if(isdefined(staff_info.upgrade.revive_ammo_stock))
+			{
+				self setweaponammostock(level.var_2b2f83e5, staff_info.upgrade.revive_ammo_stock);
+				self setweaponammoclip(level.var_2b2f83e5, staff_info.upgrade.revive_ammo_clip);
+			}
+		}
+	}
+}
+
+is_weapon_upgraded_staff(w_weapon)
+{
+	switch(w_weapon.name)
+	{
+		case "staff_air_upgraded":
+		case "staff_fire_upgraded":
+		case "staff_lightning_upgraded":
+		case "staff_water_upgraded":
+		    return true;
+		default:
+		    return false;
+	}
+}
+
+tomb_track_crafted_staff_trigger()
+{
+	s_elemental_staff = get_staff_info_from_weapon_name(self.weaponname, 1);
+	if(!isdefined(self.base_weaponname))
+	{
+		self.base_weaponname = s_elemental_staff.weapname;
+	}
+	level flag::clear(self.base_weaponname + "_picked_up");
+}
+
+tomb_staff_pickup_cooldown(str_equipname)
+{
+	level.var_b79a2c38[str_equipname] = 1;
+	wait(0.2);
+	level.var_b79a2c38[str_equipname] = 0;
+}
+
+tomb_custom_craftable_validation(player)
+{
+    if(self.stub.equipname == "equip_dieseldrone")
+	{
+		level.quadrotor_status.pickup_trig = self.stub;
+		if(level.quadrotor_status.crafted)
+		{
+			quadrotor = getweapon("equip_dieseldrone");
+			return !players_has_quadrotor_weapon(quadrotor) && !level flag::get("quadrotor_cooling_down");
+		}
+	}
+	return true;
+}
+
+players_has_quadrotor_weapon(weaponname)
+{
+	players = getplayers();
+	for(i = 0; i < players.size; i++)
+	{
+		if(players[i] hasweapon(weaponname))
+		{
+			return true;
+		}
+	}
+	quadrotors = getentarray("quadrotor_ai", "targetname");
+	if(quadrotors.size >= 1)
+	{
+		return true;
+	}
+	return false;
 }
 
 tomb_enable_perk_machines_in_zone()
@@ -830,16 +1413,76 @@ zm_castle_pap()
         level clientfield::set(catcher.script_parameters, 6);
     }
 
+    level.zombie_include_weapons[getweapon("hk416")] = 1;
+    zm_weapons::add_zombie_weapon("hk416", "hk416_upgraded", undefined, 950, undefined, undefined, 950, false, false, "");
+    level.zombie_include_weapons[getweapon("hk416")] = 1;
+    level.zombie_weapons[getweapon("hk416")].is_in_box = 1;
+    level.zombie_weapons[getweapon("hk416")].upgrade = getweapon("hk416_upgraded");
+    level.zombie_weapons_upgraded[getweapon("hk416_upgraded")] = getweapon("hk416");
+
+    level.zombie_include_weapons[getweapon("knife_plunger")] = 1;
+    zm_weapons::add_zombie_weapon("knife_plunger", "knife_plunger", undefined, 950, undefined, undefined, 950, false, false, "");
+    level.zombie_include_weapons[getweapon("knife_plunger")] = 1;
+    
+    if(isdefined(level.content_weapons))
+        arrayremovevalue(level.content_weapons, getweapon("hk416"));
+
     old_origin = level.var_54cd8d06.origin;
     level.var_54cd8d06 setorigin(level.players[0]);
     level flag::wait_till("pap_reformed");
     level.var_54cd8d06 setorigin(old_origin);
 }
 
+widows_wine_knife_override_castle()
+{
+    if(self hasweapon(getweapon("knife_plunger")))
+    {
+        return;
+    }
+    self takeweapon(self.w_widows_wine_prev_knife);
+    if(self.w_widows_wine_prev_knife.name == "bowie_knife")
+    {
+        self giveweapon(level.w_widows_wine_bowie_knife);
+        self zm_utility::set_player_melee_weapon(level.w_widows_wine_bowie_knife);
+    }
+    else if(self.w_widows_wine_prev_knife.name == "sickle_knife")
+    {
+        self giveweapon(level.w_widows_wine_sickle_knife);
+        self zm_utility::set_player_melee_weapon(level.w_widows_wine_sickle_knife);
+    }
+    else
+    {
+        self giveweapon(level.w_widows_wine_knife);
+        self zm_utility::set_player_melee_weapon(level.w_widows_wine_knife);
+    }
+}
+
+spider_lair_entrance_webs()
+{
+    self setCanDamage(0);
+}
+
+// update_valid_players
 zm_island_pap()
 {
     if(IS_DEBUG && DEBUG_ISLAND_NOCHANGES) return;
     level flag::wait_till("initial_blackscreen_passed");
+    level.vehicle_initializer_cb = serious::zm_island_vehicle_spider;
+    level.gm_override_downed_spot = (-1619, 2509, -1730); // teleport to the takeo boss fight room because undefined zone is probably causing a crash
+    level.var_5ccd3661 = 999;
+
+    level.zombie_include_weapons[getweapon("hk416")] = 1;
+    zm_weapons::add_zombie_weapon("hk416", "hk416_upgraded", undefined, 950, undefined, undefined, 950, false, false, "");
+    level.zombie_include_weapons[getweapon("hk416")] = 1;
+    level.zombie_weapons[getweapon("hk416")].is_in_box = 1;
+    level.zombie_weapons[getweapon("hk416")].upgrade = getweapon("hk416_upgraded");
+    level.zombie_weapons_upgraded[getweapon("hk416_upgraded")] = getweapon("hk416");
+
+    level.zombie_include_weapons[getweapon("controllable_spider")] = 1;
+    zm_weapons::add_zombie_weapon("controllable_spider", "controllable_spider", undefined, 950, undefined, undefined, 950, false, false, "");
+    level.zombie_include_weapons[getweapon("controllable_spider")] = 1;
+
+    array::thread_all(getentarray("spider_lair_entrance_webs", "targetname"), serious::spider_lair_entrance_webs);
 
     #region SKULL SHIT
     level flag::set("skullquest_ritual_complete1");
@@ -892,42 +1535,37 @@ zm_island_pap()
     level.var_2cb8e184 = 0;
     level clientfield::set("add_ww_to_box", 1);
     level.zombie_weapons[GetWeapon("hero_mirg2000")].is_in_box = 1;
-    level.CustomRandomWeaponWeights = ::zm_island_boxweight;
+    level.CustomRandomWeaponWeights = serious::zm_island_boxweight;
     thread zm_island_byethrashers();
     wait .25;
     level.var_2aacffb1 = undefined;
     level notify(#"hash_d8d0f829");
+
+    //setdvar("scr_zm_use_code_enemy_selection", 1);
+}
+
+zm_island_vehicle_spider(spider)
+{
+    if(isdefined(spider))
+    {
+        spider.team = level.zombie_team;
+        spider setteam(level.zombie_team);
+    }
+    if(IS_DEBUG)
+    {
+        compiler::nprintln("Spider spawned");
+    }
+}
+
+spider_initialize()
+{
+    level.zombie_total++;
+    self kill();
+    self delete();
 }
 
 zm_island_fix()
 {
-    if(level.script != "zm_island") return;
-    if(IS_DEBUG && DEBUG_ISLAND_NOCHANGES) return;
-    wait 1;
-    level.var_ab7eb3d4 = 10; // num spiders in round
-    level.var_2f83d088 = 10; // num thrashers in round
-    level.var_ebc4830 = 999; // thrasher round
-    level.var_5ccd3661 = 999;
-    level.var_3013498 = 999;
-    level.var_21f08627 = undefined;
-    level.var_3013498 = 999;
-    level.fn_custom_round_ai_spawn = ::genesis_nospecials;
-
-    foreach(spawner in level.var_c38a4fee)
-    {
-        spawner.is_enabled = 0;
-        spawner.script_minplayers = 19;
-        spawner.script_forcespawn = undefined;
-    }
-    foreach(spawner in level.var_feebf312)
-    {
-        spawner.is_enabled = 0;
-        spawner.script_minplayers = 19;
-        spawner.script_forcespawn = undefined;
-    }
-
-    // NOTE:
-        // Crashing *could* be related to test clients
 }
 
 zm_island_initial_fix()
@@ -1010,6 +1648,7 @@ zm_island_boxweight(a_keys)
 zm_genesis_map()
 {
     level flag::wait_till("initial_blackscreen_passed");
+    vehicle::add_main_callback("spider", serious::spider_initialize);
     level.wasp_enabled = 0;
     level.wasp_rounds_enabled = 0;
     level.next_wasp_round = 999;
@@ -1019,23 +1658,19 @@ zm_genesis_map()
     for(i = 0; i < 4; i++)
     {
         level.zombie_weapons[getweapon("idgun_" + i)].is_in_box = 1;
-    }
-    to_remove = [];
-    blacklist = [
-                    struct::get_array("companion_totem_part", "targetname")[0].model,
-                    struct::get_array("companion_head_part", "targetname")[0].model,
-                    struct::get_array("companion_gem_part", "targetname")[0].model
-                ];
-    foreach(model in getentarray("script_model", "className"))
-    {
-        if(!isdefined(model.model)) continue;
-        if(!isinarray(blacklist, model.model)) continue;
-        to_remove[to_remove.size] = model;
-    }
-    array::thread_all(to_remove, sys::delete);
-    
+    }    
     turrets = zm_genesis_collect_turrets();
     array::thread_all(turrets, serious::zm_genesis_turret_pvp);
+    spawner::add_archetype_spawn_function("keeper_companion", serious::keeper_init);
+    fn_pow = @zm_power<scripts\zm\_zm_power.gsc>::turn_power_on_and_open_doors;
+    foreach(pow in getentarray("power_volume", "targetname"))
+    {
+        level thread [[ fn_pow ]](pow.script_int);
+    }
+
+    level.zombie_include_weapons[getweapon("melee_katana")] = 1;
+    zm_weapons::add_zombie_weapon("melee_katana", "melee_katana", undefined, 950, undefined, undefined, 950, false, false, "");
+    level.zombie_include_weapons[getweapon("melee_katana")] = 1;
 }
 
 // hacky way to collect all the turrets by using their triggers
@@ -1102,15 +1737,53 @@ zm_genesis_beam_damage_think()
         player = a_trace["entity"];
         if(player.sessionstate != "playing") continue;
         if(player == e_player) continue;
-        player doDamage(int(GENESIS_TURRET_DPS * n_wait_time), v_hit_location, e_player, undefined, "none", "MOD_UNKNOWN", 0, level.weaponnone);
+        player doDamage(int(GENESIS_TURRET_DPS * level.round_number * n_wait_time), v_hit_location, e_player, undefined, "none", "MOD_UNKNOWN", 0, level.weaponnone);
 	}
+}
+
+zm_genesis_apothicon_monitor()
+{
+    self endon("spawned_player");
+    self endon("disconnect");
+    self endon("bled_out");
+
+    while(true)
+    {
+        // catch exiting apothicon
+        if(isdefined(self.var_5aef0317) && self.var_5aef0317)
+        {   
+            self.gm_objective_timesurvived = int(max(0, self.gm_objective_timesurvived - GM_TELEPORT_STRAT_PENALTY));
+            while(isdefined(self.var_5aef0317) && self.var_5aef0317)
+            {
+                wait 0.1;
+            }
+        }
+
+        // catch entering opothicon
+        if(isdefined(self.var_a393601c) && self.var_a393601c)
+        {
+            self.gm_objective_timesurvived = int(max(0, self.gm_objective_timesurvived - GM_TELEPORT_STRAT_PENALTY));
+            while(isdefined(self.var_a393601c) && self.var_a393601c)
+            {
+                wait 0.1;
+            }
+
+            // protect briefly when entering apothicon
+            self thread gm_spawn_protect(2.5);
+        }
+        wait 1;
+    }
 }
 
 zm_moon_pap()
 {
     level flag::wait_till("initial_blackscreen_passed");
 
+    // due to triggers being team locked on AI, we have to simulate trigger logic for the doors.
+    thread zm_moon_door_fix();
+
     ArrayRemoveValue(level.diggers, "teleporter");
+    ArrayRemoveValue(level.diggers, "hangar");
 
     pap_spot = (37.23, 3943, -155);
 
@@ -1150,6 +1823,59 @@ zm_moon_pap()
         level.players[0] giveMaxAmmo(weapon);
         level.players[0] switchToWeapon(weapon);
         level.players[0] notify("weapon_give", weapon);
+    }
+}
+
+zm_moon_door_fix()
+{
+    level endon("end_game");
+    while(true)
+    {
+        all = getentarray("zombie_door_airlock", "script_noteworthy");
+        i = 0;
+        foreach(trig in all)
+        {
+            if(i % 2)
+            {
+                wait 0.05;
+            }
+            if(!isdefined(trig))
+            {
+                continue;
+            }
+            if(!(trig IsTriggerEnabled()))
+            {
+                continue;
+            }
+            if(isdefined(trig._door_open) && trig._door_open)
+            {
+                continue;
+            }
+            e_occupied = undefined;
+            foreach(zombie in getaiteamarray(level.zombie_team))
+            {
+                if(!isdefined(zombie))
+                {
+                    continue;
+                }
+                if(!isalive(zombie))
+                {
+                    continue;
+                }
+                if(zombie isTouching(trig))
+                {
+                    e_occupied = zombie;
+                    break;
+                }
+            }
+            if(!isdefined(e_occupied))
+            {
+                i++;
+                continue;
+            }
+            trig notify("trigger", e_occupied);
+        }
+        wait 0.05;
     }
 }
 
@@ -1224,7 +1950,7 @@ zm_genesis_fix()
     level.var_256b19d4 = 1; // some kind of counter, disables ai spawning for bugs or something
     level.var_ba0d6d40 = 999; // next boss spawn
     level.var_3013498 = 999;
-    level.fn_custom_round_ai_spawn = ::genesis_nospecials;
+    level.fn_custom_round_ai_spawn = serious::genesis_nospecials;
     level flag::set("mega_round_end_abcd_talking");
 }
 
@@ -1368,8 +2094,13 @@ gm_select_poi_spawn(player, return_struct = false)
         return GetRandomMapSpawn(player, return_struct, true);
     }
 
-    // 2. Do 8 bullet traces in a pitch circle, from origin + 70 and take the furthest result as the angles for the spawner
-        // This should automatically make the player look away from walls, etc.
+    return gm_poi_get_best_spawn(position);
+}
+
+gm_poi_get_best_spawn(position)
+{
+    // Do 8 bullet traces in a pitch circle, from origin + 70 and take the furthest result as the angles for the spawner
+    // This should automatically make the player look away from walls, etc.
 
     s_spawn = spawnStruct();
     s_spawn.origin = position;
@@ -1433,6 +2164,7 @@ gm_generate_poi_spawns()
     foreach(v_point in a_v_poi)
     {
         if(is_point_in_bad_zone(v_point)) continue;
+        if(point_bad_by_location(v_point)) continue;
         points = util::positionquery_pointarray(v_point, 0, 100, 150, 50); // tightening these parameters produces less variance, but it also makes sure people dont spawn in weird spots.
         if(!isdefined(points)) continue;
         points = array::randomize(points);
@@ -1738,3 +2470,253 @@ gm_limit_poi_set(a_poi_set = [], count = 0)
     }
     return a_v_copy;
 }
+
+gm_oob_fix()
+{
+    self endon("bled_out");
+    self endon("disconnect");
+    self endon("spawned_player");
+    initmaps();
+    if(!isdefined(level.gm_oob_monitors) || !isarray(level.gm_oob_monitors))
+    {
+        return;
+    }
+    while(true)
+    {
+        wait 0.1;
+        if(isdefined(self.lander) && self.lander)
+        {
+            continue;
+        }
+        if(isdefined(self.beastmode) && self.beastmode)
+        {
+            continue;
+        }
+        if(isdefined(self._padded) && self._padded)
+        {
+            continue;
+        }
+        if(isdefined(self.var_122a2dda) && self.var_122a2dda)
+        {
+            continue;
+        }
+        self.oob_zone_cache = self zm_zonemgr::get_player_zone();
+        foreach(callback in level.gm_oob_monitors)
+        {
+            if(self [[ callback ]]())
+            {
+                self playsound("zmb_bgb_plainsight_start");
+                playfx(level._effect["teleport_splash"], self.origin);
+                self.gm_objective_timesurvived = int(max(0, self.gm_objective_timesurvived - GM_TELEPORT_STRAT_PENALTY));
+                self Try_Respawn(true);
+                break;
+            }
+        }
+    }
+}
+
+zm_cosmodrome_oob_check1()
+{
+    if(self.origin[2] < 200)
+    {
+        return false;
+    }
+    if(self.origin[0] > -1500)
+    {
+        return false;
+    }
+    return distance2D(self.origin, (-1782, 1641, 200)) < 2500;
+}
+
+zm_cosmodrome_oob_check2()
+{
+    if(self.origin[2] < 25)
+    {
+        return false;
+    }
+    return distance2D(self.origin, (-964, -54, 28)) < 250;
+}
+
+zm_cosmodrome_oob_check3()
+{
+    if(self.origin[2] < 0)
+    {
+        return false;
+    }
+    if(self.origin[1] < 1980)
+    {
+        return false;
+    }
+    if(self.origin[0] < 170)
+    {
+        return false;
+    }
+    return self.origin[0] < 1400;
+}
+
+zm_zod_oob_check1()
+{
+    if(self.origin[2] < 512)
+    {
+        return false;
+    }
+    if(distance2D(self.origin, (4387, -4187, 546)) > 1000)
+    {
+        return false;
+    }
+    if(!isdefined(self.oob_zone_cache) || self.oob_zone_cache == "zone_theater_high_A")
+    {
+        return true;
+    }
+    return false;
+}
+
+zm_zod_oob_check2()
+{
+    if(self.origin[2] < 350)
+    {
+        return false;
+    }
+    if(distance2D(self.origin, (2758, -5969, 275)) > 2500)
+    {
+        return false;
+    }
+    if(!isdefined(self.oob_zone_cache))
+    {
+        return true;
+    }
+    return false;
+}
+
+zm_zod_oob_check3()
+{
+    if(self.origin[2] < 625)
+    {
+        return false;
+    }
+    if(distance2D(self.origin, (5440, -3303, 248)) > 1000)
+    {
+        return false;
+    }
+    if(!isdefined(self.oob_zone_cache))
+    {
+        return true;
+    }
+    return false;
+}
+
+zm_castle_oob_check1()
+{
+    if(self.origin[2] < 800)
+    {
+        return false;
+    }
+    if(distance2D(self.origin, (1431, 2463, 839)) > 1000)
+    {
+        return false;
+    }
+    if(distance2D(self.origin, (182, 2195, 912)) < 450)
+    {
+        return false;
+    }
+    return !isdefined(self.oob_zone_cache);
+}
+
+zm_castle_oob_check2()
+{
+    if(self.origin[2] < 980)
+    {
+        return false;
+    }
+    if(isdefined(self.oob_zone_cache) && self.oob_zone_cache == "zone_clocktower")
+    {
+        return false;
+    }
+    if(distance2D(self.origin, (182, 2195, 912)) < 450)
+    {
+        return false;
+    }
+    return true;
+}
+
+zm_temple_oob_check1()
+{
+    if(self.origin[2] < 480)
+    {
+        return false;
+    }
+    return distance2d(self.origin, (-2, 520, 496)) < 300;
+}
+
+zm_temple_oob_check2()
+{
+    if(self.origin[2] < 58)
+    {
+        return false;
+    }
+    return distance2d(self.origin, (1444, -757, 143)) < 200;
+}
+
+zm_temple_oob_check3()
+{
+    if(self.origin[2] < -295)
+    {
+        return false;
+    }
+    return !isdefined(self.oob_zone_cache) && distance2d(self.origin, (1385, -136, -293)) < 150;
+}
+
+zm_temple_oob_check4()
+{
+    if(self.origin[2] < -150)
+    {
+        return false;
+    }
+    return !isdefined(self.oob_zone_cache) && distance2d(self.origin, (529, -401, -142)) < 100;
+}
+
+zm_temple_oob_check5()
+{
+    if(self.origin[2] < -325)
+    {
+        return false;
+    }
+    return !isdefined(self.oob_zone_cache) && distance2d(self.origin, (-433, -901, -208)) < 1000;
+}
+
+zm_stalingrad_oob_check1()
+{
+    if(isdefined(self.oob_zone_cache) && self.oob_zone_cache == "boss_arena_zone")
+    {
+        return true;
+    }
+    return false;
+}
+
+zm_stalingrad_oob_check2()
+{
+    if(isdefined(self.var_a0a9409e) && self.var_a0a9409e)
+    {
+        return false;
+    }
+    if(!isdefined(self.oob_zone_cache))
+    {
+        if(!isdefined(self.zm_stalingrad_oob_check2))
+        {
+            self.zm_stalingrad_oob_check2 = 0;
+        }
+        self.zm_stalingrad_oob_check2 += 0.1;
+        if(self.zm_stalingrad_oob_check2 > 5) // oob for 5 seconds
+        {
+            self.zm_stalingrad_oob_check2 = 0;
+            return true;
+        }
+        return false;
+    }
+    self.zm_stalingrad_oob_check2 = 0;
+    return false;
+}
+
+#region ZM_ISLAND
+
+#endregion

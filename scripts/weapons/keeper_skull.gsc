@@ -12,11 +12,6 @@ watch_skull_attack()
     self endon("spawned_player");
     level endon("game_ended");
 
-	if(isdefined(level.var_615d751))
-	{
-		self flag::wait_till("has_skull");
-	}
-
 	while(true)
 	{
         wait(0.05);
@@ -87,7 +82,7 @@ keeper_skull_damage(e_player)
 		e_player.var_20b8c74a = 1;
         wait(0.25);
         e_player thread playFXTimedOnTag(level._effect["tesla_shock"], "j_head", 0.25);
-        self skull_consume_hero_power(5);
+        self skull_consume_hero_power(10);
         e_player dodamage(int(SKULL_DMG_PER_TICK * level.round_number), e_player.origin, self, undefined, "none", "MOD_UNKNOWN", 0, level.weaponnone);
         e_player set_move_speed_scale(0.75);
         if(!e_player util::is_bot()) e_player SetElectrified(0.25);
@@ -101,6 +96,11 @@ skull_consume_hero_power(n_power_consumed)
 	if(self.var_118ab24e >= n_power_consumed)
 	{
 		self gadgetpowerset(0, self.var_118ab24e - n_power_consumed);
+        self.var_118ab24e -= n_power_consumed;
+        if(self.var_118ab24e < 0)
+        {
+            self.var_118ab24e = 0;
+        }
 	}
 	else
 	{
@@ -116,11 +116,6 @@ watch_skull_mesmerize()
     self endon("bled_out");
     self endon("spawned_player");
     level endon("game_ended");
-
-	if(isdefined(level.var_615d751))
-	{
-		self flag::wait_till("has_skull");
-	}
 
 	while(true)
 	{
@@ -189,4 +184,45 @@ is_within_skull_range(e_player)
 		return true;
 	}
 	return false;
+}
+
+detour zm_island_skullquest<scripts\zm\zm_island_skullweapon_quest.gsc>::function_c7a0c111(b_success = 1, var_bf49654c = 1)
+{
+	self endon("death");
+	self notify(#"hash_eb13d3a5");
+	if(!(isdefined(self.var_3f6ea790) && self.var_3f6ea790))
+	{
+		self setgoal(self.origin);
+		if(isdefined(var_bf49654c) && var_bf49654c)
+		{
+			wait(randomfloatrange(0.05, 0.25));
+		}
+        if(!isdefined(self))
+        {
+            return;
+        }
+		if(isdefined(b_success) && b_success)
+		{
+			if(isdefined(self.archetype) && self.archetype == "zombie")
+			{
+                level.players[0] iPrintLnBold("test");
+				self thread zombie_utility::zombie_eye_glow_stop();
+				self clientfield::set("death_ray_shock_eye_fx", 1);
+				self scene::play("cin_zm_dlc1_zombie_dth_deathray_04", self);
+				self clientfield::set("death_ray_shock_eye_fx", 0);
+				self zombie_utility::zombie_head_gib(self);
+			}
+			if(isdefined(self.archetype) && self.archetype != "spider")
+			{
+				util::wait_network_frame();
+				self thread zombie_utility::zombie_gut_explosion();
+			}
+		}
+		self dodamage(self.health * 2, self.origin);
+	}
+}
+
+detour zm_island_skullquest<scripts\zm\zm_island_skullweapon_quest.gsc>::function_80794095()
+{
+
 }

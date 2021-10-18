@@ -513,7 +513,7 @@ rng_perk_machine_think()
         {
             continue;
         }
-        wait 0.025;
+        wait 0.05;
         waittillframeend;
         perk = get_perk_from_mdl(level.bottle_spawn_location.model);
         self thread rng_perk_grab_check(perk);

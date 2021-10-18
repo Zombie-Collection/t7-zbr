@@ -92,14 +92,23 @@ ThundergunKnockback(attacker, weapon)
     angles = VectorNormalize(anglesToForward(attacker getPlayerAngles()));
 
     final_velocity = angles * velocity;
-    final_velocity_clamped = (final_velocity[0], final_velocity[1], min(max(final_velocity[2], 200), -200));
+    final_velocity_clamped = (final_velocity[0], final_velocity[1], min(max(final_velocity[2], 400), -400));
 
     self setOrigin(self getOrigin() + (0,0,10));
     self setVelocity(final_velocity_clamped);
     self.launch_magnitude_extra = 200;
     self.v_launch_direction_extra = vectorNormalize(final_velocity_clamped);
-    self dodamage(int(d * d * TGUN_BASE_DMG_PER_ROUND) * level.round_number, self.origin, attacker, undefined, "none", "MOD_PISTOL_BULLET", 0, level.weaponnone);
+    self.gm_thundergunned = true;
+    self dodamage(TG_Clamp(int(d * d * TGUN_BASE_DMG_PER_ROUND) * level.round_number, self), self.origin, attacker, undefined, "none", "MOD_PISTOL_BULLET", 0, level.weaponnone);
+    self.gm_thundergunned = false;
     self thread TG_ImpactDamage(attacker);
+}
+
+TG_Clamp(damage, victim)
+{
+    if(!isdefined(victim) || !isdefined(victim.health)) return 0;
+    if(damage < victim.health) return damage;
+    return int(victim.health - 1);
 }
 
 TG_ImpactDamage(attacker)

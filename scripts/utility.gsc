@@ -21,7 +21,7 @@ createText(font, fontScale, align, relative, x, y, sort, alpha, text, color, isL
     textElem.alpha          = alpha;
     textElem.color          = color;
     textElem SetText(text);
-    textElem thread watchDeletion( self );
+    textElem thread watchDeletion(self);
 
     self.hud_amount++;  
     return textElem;
@@ -73,7 +73,7 @@ createRectangle(align, relative, x, y, width, height, color, shader, sort, alpha
     boxElem setShader(shader, width, height);
     boxElem.hidden = false;
     boxElem hud::setPoint(align, relative, x, y);
-    boxElem thread watchDeletion( self );
+    boxElem thread watchDeletion(self);
     
     self.hud_amount++;
     return boxElem;
@@ -154,6 +154,14 @@ ZoneUpdateHUD()
             else
             {
                 self iPrintLnBold(self getOrigin() + "|" + self getPlayerAngles());
+                if(DEBUG_NEXT_ROUND)
+                {
+                    level.zombie_total = 0;
+                    foreach(ai in getaiteamarray(level.zombie_team))
+                    {
+                        ai kill();
+                    }
+                }
             }
         }
     }
@@ -434,7 +442,9 @@ GM_KillMusic()
 GM_StartMusic()
 {
     if(isdefined(level.playing_song) && level.playing_song)
+    {
         return;
+    }
     music = level.winning_musics[randomint(level.winning_musics.size)];
     thread NextSong(music);
 }
@@ -581,7 +591,7 @@ dev_bind()
                 ads_ent = undefined;
                 while(self useButtonPressed() || self adsButtonPressed())
                 {
-                    wait 0.025;
+                    wait 0.05;
                 }
             }
 
@@ -593,13 +603,13 @@ dev_bind()
                     self iPrintLnBold("Ent in hand");
                 while(self meleeButtonPressed() && self adsButtonPressed())
                 {
-                    wait 0.025;
+                    wait 0.05;
                 }
             }
-            wait 0.025;
+            wait 0.05;
         }
         ads_ent = undefined;
-        wait 0.025;
+        wait 0.05;
     }
 }
 

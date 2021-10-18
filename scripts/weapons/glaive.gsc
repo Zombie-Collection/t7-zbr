@@ -17,7 +17,6 @@ AdjustPlayerSword(player, type, noprint=false)
         default:
             player takeWeapon(level.var_15954023.weapons[player.originalindex][1]);
             player takeWeapon(level.var_15954023.weapons[player.originalindex][2]);
-			if(!noprint) self iPrintLnBold("Sword Updated");
             return;
     }
 
@@ -32,8 +31,6 @@ AdjustPlayerSword(player, type, noprint=false)
     player zm_weapons::weapon_give(weapon, 0, 0, 1);
     player GadgetPowerSet(0, 100);
     player.current_sword = player.current_hero_weapon;
-
-    if(!noprint) self iPrintLnBold("Sword Updated");
 }
 
 glaive_pvp_monitor()
@@ -256,6 +253,8 @@ lc_flag_hit(enemy, hit)
 lc_do_damage(source_enemy, arc_num, player, params)
 {
 	player endon("disconnect");
+	player endon("bled_out");
+	self endon("bled_out");
     self endon("disconnect");
 	if(arc_num > 1) wait(randomfloatrange(0.2, 0.6) * arc_num);
 	if(self.sessionstate != "playing") return;
@@ -285,7 +284,7 @@ lc_do_damage(source_enemy, arc_num, player, params)
 		self electric_cherry_shock_fx();
 		self thread electric_cherry_stun();
 	}
-	self.tesla_death = params.should_kill_enemies;
+	//self.tesla_death = params.should_kill_enemies;
 	origin = player.origin;
 	if(isdefined(source_enemy) && source_enemy != self) origin = source_enemy.origin;
 	if(self.sessionstate != "playing") return;

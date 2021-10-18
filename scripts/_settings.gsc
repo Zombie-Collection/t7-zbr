@@ -6,7 +6,7 @@
 // Extinct: Misc code snippets, testing.
 // ItsFebiven: Misc code snippets, testing.
 // SyGnUs: Gameplay testing, chatting.
-// Candy, Snowy, CF499, Daltax, Leaf: Gameplay testing
+// Candy, Snowy, CF499, Daltax, Leaf, ssno, AMS, Kai, Orbis, Taleb: Gameplay testing
 // My youtube subs, and anyone else I forgot about at this current point in time.
 
 /////////////////////////////////
@@ -14,9 +14,21 @@
 /////////////////////////////////
 #region Tunables
 
+// When set to true, enables team based ZBR
+// default value: false
+#define ZBR_TEAMS = false;
+
+// Adjusts the size of teams when ZBR_TEAMS is enabled. Must be between 2 and 4.
+// default value: 2
+#define ZBR_TEAMSIZE = 2;
+
 // When set to true, forces you to gain host in public matches
 // default value: true
 #define FORCE_HOST = true;
+
+// When set to true, zm_island will not load. This is due to incompatibility issues and will be fixed in the future
+// default value: true
+#define DISABLE_ISLAND = false;
 
 // The delay, in seconds, before applying any game mode logic to a player once spawned
 // default value: 2
@@ -139,12 +151,12 @@
 #define TGUN_LAUNCH_MAX_VELOCITY = 5000;
 
 // Thundergun max damage at base
-// default value: 1000
-#define TGUN_BASE_DMG_PER_ROUND = 1000;
+// default value: 500
+#define TGUN_BASE_DMG_PER_ROUND = 500;
 
 // Damage from thundergun when the player impacts a surface at a high velocity, per hundred units per second (velocity)
-// default value: 100
-#define TGUN_IMPACT_DMG_PER_HUNDRED_U_S = 100;
+// default value: 200
+#define TGUN_IMPACT_DMG_PER_HUNDRED_U_S = 200;
 
 // Damage done by the explosion of the idgun to other players
 // default value: 450
@@ -187,8 +199,8 @@
 #define ZM_SPIKES_SLAM_DMG = 2000;
 
 // Damage that the dragonshield projectile does, multiplied by the round number.
-// default value: 1000
-#define ZM_DRAGSHIELD_DMG = 1000;
+// default value: 400
+#define ZM_DRAGSHIELD_DMG = 400;
 
 // Damage scaled by round number done to players, linear mapped by cherry power
 // default value: 1000
@@ -215,8 +227,8 @@
 #define AAT_THUNDERWALL_PVP_DAMAGE = 1000;
 
 // AAT fireworks damage scaled by the round
-// default value: 1000
-#define AAT_FIREWORKS_PVP_DAMAGE = 1000;
+// default value: 300
+#define AAT_FIREWORKS_PVP_DAMAGE = 300;
 
 // pop shocks pvp damage scaled by the round
 // default value: 2500
@@ -266,7 +278,7 @@
 // default value: 1.0f
 #define STAFF_LIGHTNING_DMG_SCALAR = 1.0f;
 
-// Defines the water staff's damage per second, scaled by round. Upgraded staff does 2x
+// Defines the water staff's damage per second, scaled by round. Upgraded staff does 1.35x
 // default value: 125
 #define STAFF_WATER_DPS = 125;
 
@@ -299,8 +311,8 @@
 #define BOW_GEYSER_FIRE_TOTAL = 1000;
 
 // Defines the damage done to players within radius of a storm bow shot, scaled by the round
-// default value: 1000
-#define BOW_STORM_SHOCK_DAMAGE = 500;
+// default value: 100
+#define BOW_STORM_SHOCK_DAMAGE = 100;
 
 // Defines the damage done per round as push damage when hit by the wolf bow push
 // default value: 500
@@ -311,20 +323,20 @@
 #define NUKE_HEALTH_PERCENT = 0.05;
 
 // Damage multiplier for when a player is frozen by a bgb, multiplied by final damage result.
-// default value: 0.1
-#define BGB_FROZEN_DAMAGE_REDUX = 0.1;
+// default value: 0.08
+#define BGB_FROZEN_DAMAGE_REDUX = 0.08;
 
 // Percent of health to do as damage to anyone marked during killing time
-// default value: 0.2
-#define BGB_KILLINGTIME_MARKED_PCT = 0.2;
+// default value: 0.35
+#define BGB_KILLINGTIME_MARKED_PCT = 0.35;
 
 // Time in ms that a player will receive credit for damage inflicted by a fall after attacking their victim.
 // default value: 7500
 #define MOD_FALL_GRACE_PERIOD = 7500;
 
 // Total damage a single skull from the bow can do, scaled by the round number.
-// default value: 250
-#define BOW_DEMONGATE_SKULL_TOTALDAMAGE = 250;
+// default value: 100
+#define BOW_DEMONGATE_SKULL_TOTALDAMAGE = 100;
 
 // Number of skulls to spawn for pvp damage per shot
 // default value: 4
@@ -335,7 +347,7 @@
 #define EXPLOSIVE_KNOCKBACK_SCALAR = 200;
 
 // Damage done per 0.25s tick for the skull, scaled by the round number
-// default value: 250
+// default value: 500
 #define SKULL_DMG_PER_TICK = 500;
 
 // Score awarded to a player who mesmerizes another player, given every 0.25s
@@ -375,12 +387,12 @@
 #define WIDOWS_WINE_COCOON_TIME = 7;
 
 // Velocity applied to players when wind staff hits them
-// default value: 5000
-#define WIND_STAFF_LAUNCH_VELOCITY = 5000;
+// default value: 7000
+#define WIND_STAFF_LAUNCH_VELOCITY = 7000;
 
 // Mirg2000 damage per tick of AOE (.25s), scaled by round number
-// default value: 500
-#define MIRG_2000_AOE_TICK_DMG = 500;
+// default value: 125
+#define MIRG_2000_AOE_TICK_DMG = 125;
 
 // Time in seconds that a player shrinks for when attacked by shrink ray.
 // default value: 5
@@ -423,8 +435,8 @@
 #define GM_MOVESPEED_BOOSTER_MP = 1.15;
 
 // Time, in seconds, that fear in the headlights is active
-// default value: 30
-#define BGB_FITH_ACTIVE_TIME = 30;
+// default value: 20
+#define BGB_FITH_ACTIVE_TIME = 20;
 
 // If true, will enable early spawns for players who are defeated during a round
 // default value: false
@@ -470,6 +482,74 @@
 // default value: 250
 #define BGB_UNQUENCHABLE_CASHBACK_RD = 250;
 
+// Defines the speed scale players will move at when undead man walking is active
+// default value: 0.5
+#define BGB_UMW_SPEED_SCALE = 0.5;
+
+// Defines the amount of damage reduction applied to the fire staff
+// default value: 0.18
+#define FIRE_STAFF_DMG_REDUCTION = 0.18;
+
+// Time in seconds to remove from a player's objective progress when using a teleporter
+// default value: 25
+#define GM_TELEPORT_STRAT_PENALTY = 25;
+
+// Number of tac grenades to remove after awarding the weapon on respawn
+// default value: 1
+#define TAC_GRENADE_REDUCTION = 1;
+
+// percent chance that a zombie drops a live grenade when the wager is active
+// default value: 5
+#define WAGER_DROPNADE_CHANCE = 5;
+
+// percent body shot damage reduction (and 1/2 of the headshot increase). Should be between 0 and 1.
+// default value: 0.95
+#define WAGER_HEADSHOT_DMG_PCT = 0.95;
+
+// From which distance this modifier is strongest
+// default value: 50;
+#define WAGER_PROXIMITY_START_DIST = 50;
+
+// From which distance this modifier is weakest
+// default value: 300;
+#define WAGER_PROXIMITY_END_DIST = 300;
+
+// Multiplier on damage done to you in close proximity when proximity is wagered
+// default value: 2.0
+#define WAGER_PROXIMITY_BOOST = 2.0;
+
+// percent of the enemy player's points to leech per second when in proximity to them
+// default value: 0.025
+#define WAGER_GM4_DOT_PCT = 0.025;
+
+// percent chance to award bonus points to enemy players who attack you
+// default value: 10
+#define WAGER_BONUSMP_CHANCE = 10;
+
+// percent increase to player points for wager
+// default value: 0.05
+#define WAGER_BONUSMP_PCT = 0.05;
+
+// maximum number of points a player will hold for a blood hunter drop
+// default value: 80000
+#define WAGER_MAX_BH_POINTS = 80000;
+
+// percent increase of movement speed per blood hunter stack
+// default value: 0.075;
+#define WAGER_BH_MOVESPEED_STACK = 0.075;
+
+// percent increase of damage per blood hunter stack (additive)
+// default value: 0.15
+#define WAGER_GB_DMG_STACK = 0.15;
+
+// damage per round for friendly keeper against players using up attack
+// default value: 1500
+#define DMG_KEEPER_ATK_UP = 1500;
+
+// damage per round for friendly keeper against players using any other attack
+// default value: 750
+#define DMG_KEEPER_ATK_ELSE = 750;
+
 #endregion
 
 ///////////////////////////
@@ -497,7 +577,7 @@
 
 // When true, exits the game immediately after ending instead of waiting for outro cutscene 
 // default value: false
-#define DEV_EXIT = true;
+#define DEV_EXIT = false;
 
 // When true, sets the host player to become invulnerable
 // default value: false
@@ -521,7 +601,7 @@
 
 // When true, enables development hud features
 // default value: false
-#define DEV_HUD = true;
+#define DEV_HUD = false;
 
 // When true, creates a dev hud for the current zone
 // default value: false
@@ -561,7 +641,7 @@
 
 // When enabled, prints the weapon used to damage a player
 // default value: false
-#define DEV_DMG_DEBUG_FIRST = false;
+#define DEV_DMG_DEBUG_FIRST = true;
 
 // When enabled, prints the damage, score, health, and maxhealth of the victim, to the victim
 // default value: false
@@ -653,7 +733,7 @@
 
 // if true, when on zm_tomb, completes the one inch punch box challenge
 // default value: false
-#define DEBUG_OIP = false;
+#define DEBUG_OIP = true;
 
 // if true, all staffs will be upgraded by default.
 // default value: false
@@ -771,9 +851,41 @@
 // default value: false
 #define DEV_FORGEMODE = false;
 
+// When set to anything except undefined, gives the host the selected bgb on spawn
+// default value: undefined
+#define DEV_BGB = undefined;
+
 // When true, the host player will see normal spectator screen
 // default: false;
 #define DEV_DISABLE_HOST_SPEC_FIX = false;
+
+// Defines the damage per round of the dragon whelp on Gorod Krovi
+// default value: 250
+#define DRAGON_WHELP_DMG = 250;
+
+// Defines the health of the dragon whelp on Gorod Krovi
+// default value: 4500
+#define DRAGON_WHELP_HEALTH = 4500;
+
+// Defines the round at which the dragon gauntlet on gorod krovi is automatically unlocked
+// default value: 10
+#define DRAGON_GAUNTLET_UNLOCK_ROUND = 10;
+
+// When true, allows the host to skip the current round by holding use
+// default value: false
+#define DEBUG_NEXT_ROUND = true;
+
+// When defined, awards the host this weapon on spawn
+// default value: undefined
+#define DEBUG_WEAPON = undefined;
+
+// When true, will print debugging info to notepad when players die
+// default value: false
+#define DEBUG_DEATHS = false;
+
+// When true, killcams will be used in zbr
+// default value: false
+#define DEBUG_USE_KILLCAMS = false;
 
 #endregion
 
@@ -907,6 +1019,22 @@ custom_maps()
             unlock_all_debris();
             gm_generate_spawns(); // generate spawn points for this map, using the POI system
         break;
+
+        case "zm_nazi_zombie_school":
+            arr = [
+                getent("ee_door", "targetname"),
+                getent("ee_clip", "targetname")
+            ];
+            if(isdefined(arr))
+            {
+                foreach(ent in arr)
+                {
+                    ent connectPaths();
+                    ent delete();
+                }
+            }
+            gm_generate_spawns();
+        break;
         
         default:
             gm_generate_spawns();
@@ -989,6 +1117,14 @@ gm_adjust_custom_weapon(w_weapon, f_result, n_mod_dmg, i_originalDamage, str_mea
         }
     }
     
+    if(level.script == "zm_nazi_zombie_school")
+    {
+        if(w_weapon.rootweapon.name == "s2_m30_up")
+        {
+            return f_result / 3;
+        }
+    }
+
     // correction heuristic for explosives in custom maps. This is not perfect.
     is_explosive = str_meansofdeath == "MOD_PROJECTILE" || str_meansofdeath == "MOD_PROJECTILE_SPLASH" || str_meansofdeath == "MOD_GRENADE" || str_meansofdeath == "MOD_GRENADE_SPLASH" || str_meansofdeath == "MOD_EXPLOSIVE";
     if(is_explosive && n_mod_dmg == 75)
@@ -997,4 +1133,23 @@ gm_adjust_custom_weapon(w_weapon, f_result, n_mod_dmg, i_originalDamage, str_mea
     }
 
     return f_result; // return a float or an int, representing the final damage to do. Only applies to players.
+}
+
+// blacklist poi spawns by their origin
+point_bad_by_location(v_point)
+{
+    switch(level.script)
+    {
+        case "zm_nazi_zombie_school":
+        if(distance2D(v_point, (-654.56, -577.878, -463.785)) <= 250)
+        {
+            return true;
+        }
+        if(distance2D(v_point, (111.989, 952.621, -15)) <= 250)
+        {
+            return true;
+        }
+        break;
+    }
+    return false;
 }

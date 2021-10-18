@@ -60,6 +60,9 @@ parse_bow_root(str_weapon_name)
 
 missile_fire_bow_wolf(projectile, weapon)
 {
+	self endon("bled_out");
+    self endon("spawned_player");
+    self endon("disconnect");
 	if(weapon.name != "elemental_bow_wolf_howl4") return;
     end_vec = projectile.origin + (0, 0, 0) + anglestoforward(projectile.angles) * 64;
     forward = anglestoforward(self getplayerangles());
@@ -87,11 +90,13 @@ missile_fire_bow_wolf(projectile, weapon)
 do_wolfbow_knockback(e_player, projectile_array, v_forward)
 {
     e_player endon("disconnect");
+	e_player endon("bled_out");
+    e_player endon("spawned_player");
     base_projectile = projectile_array[0];
 	base_projectile endon("movedone");
 	base_projectile endon("mechz_impact");
 	v_forward_angles = vectortoangles(v_forward);
-	max_range = 1920 * 0.1 * 2;
+	max_range = 500;
 	while(1)
 	{
 		players = getplayers();
@@ -103,9 +108,9 @@ do_wolfbow_knockback(e_player, projectile_array, v_forward)
 			root_origin = base_projectile.origin;
 			seg_b = root_origin + v_forward * max_range;
 			traveled_range = distance(base_projectile.origin, base_projectile.v_start_pos);
-			if(traveled_range < 256)
+			if(traveled_range < 512)
 			{
-				effective_range = 64 - 32 * (traveled_range / 256);
+				effective_range = 64 - (32 * (traveled_range / 512));
 			}
 			else
 			{
@@ -212,7 +217,7 @@ bow_fire_trap_enemies(e_player, v_hit_origin, str_weapon_name, w_weapon, first_p
 	e_players = array::filter(e_players, 0, serious::bow_fire_filter_targets, spawn_origin);
 	foreach(enemy in e_players)
 	{
-		enemy dodamage(BOW_FIRE_ROCK_BREAK_DMG * level.round_number, model.origin, e_player, e_player, undefined, "MOD_BURNED", 0, level.weaponnone);
+		enemy dodamage(BOW_FIRE_ROCK_BREAK_DMG * level.round_number, model.origin, e_player, e_player, undefined, "MOD_UNKNOWN", 0, level.weaponnone);
 	}
 	model clientfield::set("runeprison_rock_fx", 0);
     self.var_a320d911 = 0;
@@ -245,7 +250,7 @@ player_struggle_and_burn(e_attacker, n_duration = 0)
     while(n_duration > 0)
     {
         n_duration -= 0.1;
-        self dodamage(BOW_FIRE_DMG_PER_TICK * level.round_number, self.origin, e_attacker, e_attacker, undefined, "MOD_BURNED", 0, level.weaponnone);
+        self dodamage(BOW_FIRE_DMG_PER_TICK * level.round_number, self.origin, e_attacker, e_attacker, undefined, "MOD_UNKNOWN", 0, level.weaponnone);
         wait 0.1;
     }
     self.var_a320d911 = 0;

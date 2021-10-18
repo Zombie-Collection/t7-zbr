@@ -58,13 +58,17 @@ wait_and_do_weapon_beacon_damage(spot, grenade)
 	}
 }
 
-cymbal_monkey_planted(grenade, model, upgraded = 0)
+cymbal_monkey_planted(grenade, model, upgraded = false)
 {
     grenade endon("death");
     if(!isdefined(level.cymbal_monkeys)) level.cymbal_monkeys = [];
     original_size = level.cymbal_monkeys.size;
     while(original_size == level.cymbal_monkeys.size) wait .025;
     self grenade_go_hide(grenade, model);
+    if(upgraded)
+    {
+        self thread monkey_pulse(grenade, model);
+    }
 }
 
 kill_on_monkey_death(grenade)
@@ -144,6 +148,15 @@ hide_owner(owner)
 	owner.hide_owner = 1;
     owner.ignoreme = 1;
     owner in_plain_sight_effect(true);
+    if(isdefined(owner.invis_glow))
+    {
+        owner.invis_glow delete();
+    }
+    owner.invis_glow = spawn("script_model", owner.origin);
+    owner.invis_glow linkto(owner);
+    owner.invis_glow setmodel("tag_origin");
+    owner.invis_glow thread clone_fx_cleanup(owner.invis_glow);
+    playfxontag(level._effect["monkey_glow"], owner.invis_glow, "tag_origin");
 	playfx(level._effect["teleport_splash"], owner.origin);
 	self thread show_owner_on_attack(owner);
 	evt = self util::waittill_any_ex("explode", "death", "grenade_dud", owner, "hide_owner");
@@ -156,31 +169,36 @@ hide_owner(owner)
         playfx(level._effect["teleport_splash"], owner.origin);
         owner show();
     }
+    if(isdefined(owner.invis_glow))
+    {
+        owner.invis_glow delete();
+    }
 	owner.no_burning_sfx = undefined;
 	owner setvisibletoall();
 	owner.hide_owner = undefined;
     owner.ignoreme = 0;
 }
 
-in_plain_sight_effect(state = false)
+in_plain_sight_effect(state = false, b_zombieblood = false)
 {
+    s_effect = b_zombieblood ? "zm_tomb_in_plain_sight" : "zm_bgb_in_plain_sight";
     if(state)
     {
         self playsound("zmb_bgb_plainsight_start");
 	    self playloopsound("zmb_bgb_plainsight_loop", 1);
-        visionset_mgr::activate("visionset", "zm_bgb_in_plain_sight", self, 0.5, 30, 0.5);
-	    visionset_mgr::activate("overlay", "zm_bgb_in_plain_sight", self);
+        visionset_mgr::activate("visionset", s_effect, self, 0.5, 30, 0.5);
+	    visionset_mgr::activate("overlay", s_effect, self);
     }
     else
     {
         self stoploopsound(1);
 	    self playsound("zmb_bgb_plainsight_end");
-        visionset_mgr::deactivate("visionset", "zm_bgb_in_plain_sight", self);
-        visionset_mgr::deactivate("overlay", "zm_bgb_in_plain_sight", self);
+        visionset_mgr::deactivate("visionset", s_effect, self);
+        visionset_mgr::deactivate("overlay", s_effect, self);
     }
 }
 
-show_owner_on_attack(owner)
+show_owner_on_attack(owner, b_zombie_blood = false)
 {
 	owner endon("hide_owner");
     owner endon("bled_out");
@@ -193,11 +211,11 @@ show_owner_on_attack(owner)
 	while(isdefined(owner))
 	{
 		owner waittill("weapon_fired");
-		owner thread show_briefly(0.5);
+		owner thread show_briefly(0.5, b_zombie_blood);
 	}
 }
 
-show_briefly(showtime)
+show_briefly(showtime, b_zombie_blood = false)
 {
 	self endon("show_owner");
     self endon("disconnect");
@@ -208,14 +226,14 @@ show_briefly(showtime)
 	}
 	self.show_for_time = showtime;
 	self setvisibletoall();
-    self in_plain_sight_effect(false);
+    self in_plain_sight_effect(false, b_zombie_blood);
     playsoundatposition("evt_appear_3d", self.origin);
 	while(self.show_for_time > 0)
 	{
 		self.show_for_time = self.show_for_time - 0.05;
 		wait(0.05);
 	}
-    self in_plain_sight_effect(true);
+    self in_plain_sight_effect(true, b_zombie_blood);
     if(self.sessionstate == "playing")
     {
         self SetInvisibleToAll();
@@ -260,6 +278,7 @@ octobomb_planted(grenade)
 grenade_go_hide(grenade, model, is_octo = false)
 {
     self endon("disconnect");
+    self endon("bled_out");
     weapons = self getweaponslistprimaries();
     if(weapons.size > 0) weapon = weapons[0];
     else weapon = self getCurrentWeapon();
@@ -274,7 +293,10 @@ grenade_go_hide(grenade, model, is_octo = false)
     self freezeControls(true);
     wait .025;
     while(!self isOnGround()) wait 0.25;
+    self setstance("stand");
+	self setvelocity((0,0,0));
     clone = self ClonePlayer(99999, weapon, self);
+    wait .025;
     if(!self bgb_any_frozen()) self freezeControls(false);
     self.monkey_clone = clone;
     clone ghost();
@@ -315,4 +337,40 @@ grenade_go_hide(grenade, model, is_octo = false)
     {
         clone attach(weapon.worldmodel, "tag_weapon_right");
     }
+}
+
+monkey_pulse(grenade, model)
+{
+    self endon("disconnect");
+    grenade endon("death");
+    grenade endon("explode");
+	util::wait_network_frame();
+	n_damage_origin = grenade.origin + vectorscale((0, 0, 1), 12);
+	while(true)
+	{
+		a_targets = getplayers();
+		foreach(player in a_targets)
+		{
+            if(!isdefined(player))
+            {
+                continue;
+            }
+            if(player.sessionstate != "playing")
+            {
+                continue;
+            }
+            if(player.team == self.team)
+            {
+                continue;
+            }
+			n_distance_to_target = distance(player.origin, n_damage_origin);
+            if(n_distance_to_target > 128)
+            {
+                continue;
+            }
+            n_damage = math::linear_map(n_distance_to_target, 0, 128, 250 * level.round_number, 500 * level.round_number);
+            player dodamage(int(n_damage), player.origin, self, grenade, "none", "MOD_GRENADE_SPLASH", 0, level.w_cymbal_monkey_upgraded);
+		}
+		wait(1);
+	}
 }

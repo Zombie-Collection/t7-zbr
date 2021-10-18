@@ -20,11 +20,17 @@
 #include scripts\shared\music_shared;
 #include scripts\shared\weapons\_weaponobjects;
 #include scripts\shared\scene_shared;
+#include scripts\shared\spawner_shared;
+#include scripts\shared\vehicle_shared;
+#include scripts\shared\ai\systems\gib;
+#include scripts\shared\ai\systems\blackboard;
+#include scripts\shared\ai\archetype_utility;
 
 #include scripts\zm\_util;
 #include scripts\zm\_zm_score;
 #include scripts\zm\_zm_perks;
 #include scripts\zm\_zm_magicbox;
+#include scripts\zm\_zm_behavior;
 #include scripts\zm\_zm_bgb_machine;
 #include scripts\zm\_zm_zonemgr;
 #include scripts\zm\_zm;
@@ -58,6 +64,9 @@
 #include scripts\zm\bgbs\_zm_bgb_idle_eyes;
 #include scripts\zm\bgbs\_zm_bgb_mind_blown;
 #include scripts\zm\bgbs\_zm_bgb_disorderly_combat;
+#include scripts\zm\bgbs\_zm_bgb_in_plain_sight;
+#include scripts\zm\bgbs\_zm_bgb_board_to_death;
+#include scripts\zm\bgbs\_zm_bgb_undead_man_walking;
 #include scripts\zm\craftables\_zm_craftables;
 #include scripts\zm\gametypes\_hud_message;
 #include scripts\zm\gametypes\_globallogic;
@@ -68,6 +77,8 @@
 //required
 autoexec __init__system__()
 {
+	level.var_33655cba = serious::nullsub;
+	compiler::detour();
 	system::register("serious", ::__init__, undefined, undefined);
 }
 

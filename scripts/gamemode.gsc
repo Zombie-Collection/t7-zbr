@@ -3,6 +3,7 @@ initgamemode()
     if(isdefined(level.game_mode_init) && level.game_mode_init) return;
 
     setup_environment();
+    generate_weapons_table();
     apply_aat_changes();
     apply_bgb_changes();
     apply_powerup_changes();
@@ -35,7 +36,7 @@ initgamemodethreaded()
 {
     level flag::wait_till("begin_spawning");
     level.limited_weapons = []; // clear weapon limits so all players can obtain what they want
-    level.zombie_init_done = ::Event_ZombieInitDone;
+    level.zombie_init_done = serious::Event_ZombieInitDone;
     level thread zm_island_fix();
     level thread zm_round_failsafe();
 
@@ -60,17 +61,19 @@ initgamemodethreaded()
 
 setup_weapons()
 {
+    // unlimit all equipment
+    level._limited_equipment = [];
     if(isdefined(level.weaponriotshield) && level.weaponriotshield.name == "dragonshield")
     {
         level._riotshield_melee_power = level.riotshield_melee_power;
-        level.riotshield_melee_power = ::dragon_shield_melee;
+        level.riotshield_melee_power = serious::dragon_shield_melee;
     }
     if(isdefined(getweapon("hero_gravityspikes_melee")) && isdefined(level._hero_weapons[getweapon("hero_gravityspikes_melee")].wield_fn))
     {
         level.old_gs_wield_fn = level._hero_weapons[getweapon("hero_gravityspikes_melee")].wield_fn;
         level.old_gs_unwield_fn = level._hero_weapons[getweapon("hero_gravityspikes_melee")].unwield_fn;
-        level._hero_weapons[getweapon("hero_gravityspikes_melee")].wield_fn = ::wield_gravityspikes;
-        level._hero_weapons[getweapon("hero_gravityspikes_melee")].unwield_fn = ::unwield_gravityspikes;
+        level._hero_weapons[getweapon("hero_gravityspikes_melee")].wield_fn = serious::wield_gravityspikes;
+        level._hero_weapons[getweapon("hero_gravityspikes_melee")].unwield_fn = serious::unwield_gravityspikes;
     }
     if(isdefined(level.idgun_weapons) && isdefined(level.idgun_weapons.size) && level.idgun_weapons.size)
     {
@@ -83,8 +86,16 @@ setup_weapons()
     {
         tomb_staff_init();
     }
+    dragon_whelp_init();
     custom_aat_fix();
     custom_weapon_init();
+    if(isdefined(level.placeable_mine_planted_callbacks))
+    {
+        foreach(wpn_name, value in level.placeable_mine_planted_callbacks)
+        {
+            add_mine_planted_callback(serious::mine_watch_pvp_damage, wpn_name);
+        }
+    }
 }
 
 // will attempt to repair aat functionality for maps who disable it through certain means.
@@ -163,6 +174,8 @@ setup_environment()
     #endregion
 
     #region Callbacks and Overrides
+    level._custom_intermission = level.custom_intermission;
+    level.custom_intermission = serious::custom_intermission;
     level._callbackActorDamage = level.callbackActorDamage;
     level._overridePlayerDamage = level.overridePlayerDamage;
     level._callbackPlayerLastStand = level.callbackPlayerLastStand;
@@ -190,15 +203,24 @@ setup_environment()
     level.player_intersection_tracker_override = serious::true_one_arg;
     level.player_out_of_playable_area_monitor_callback = serious::nullsub;
     level._game_module_game_end_check = serious::nullsub;
+    level.powerup_vo_available = serious::powerup_grab_hook;
+    level.custom_magic_box_selection_logic = serious::nullsubtrue;
+    level._behaviortreescriptfunctions["zombiefindfleshservice"] = serious::find_flesh_verify;
 
     level.customSpawnLogic = undefined; //fix verruckt
     level.check_valid_spawn_override = undefined; //fix shang
+    level.prevent_player_damage = undefined; // fix team damage issue
     level.player_too_many_weapons_monitor = serious::nullsub; // fix bs with their weapons logic
+    level.gm_bowie_knife = getweapon("bowie_knife");
 
     if(level.script != "zm_moon")
+    {
         level.zombie_round_change_custom = serious::Event_RoundNext;
+    }
     else
+    {
         level.round_start_custom_func = serious::Event_RoundNext;
+    }
 
     zm_spawner::register_zombie_death_event_callback(serious::wager_gg_kill);
     #endregion
@@ -276,6 +298,10 @@ apply_bgb_changes()
     level.bgb["zm_bgb_phoenix_up"].limit_type = "event";
     level.bgb["zm_bgb_phoenix_up"].limit = serious::bgb_phoenix_up_activate;
     level.bgb["zm_bgb_unquenchable"].limit = serious::bgb_unquenchable_event;
+    level.bgb["zm_bgb_in_plain_sight"].activation_func = serious::bgb_ips_activate;
+    level.bgb["zm_bgb_board_to_death"].enable_func = serious::bgb_btd_enable;
+    level.bgb["zm_bgb_undead_man_walking"].enable_func = serious::bgb_umw_enable;
+    level.bgb["zm_bgb_undead_man_walking"].limit = 60;
     bgb::register_lost_perk_override("zm_bgb_phoenix_up", serious::bgb_pup_lost_perk, false);
 
     level.givestartloadout = serious::bgb_arms_grace_loadout;
@@ -318,6 +344,10 @@ apply_powerup_changes()
     level.powerup_grab_get_players_override = serious::powerup_grab_get_players_override;
     level._custom_zombie_powerup_drop = level.custom_zombie_powerup_drop;
     level.custom_zombie_powerup_drop = serious::custom_zombie_powerup_drop;
+    zm_powerups::register_powerup("blood_hunter_points", serious::blood_hunter_powerup_grab);
+    zm_powerups::add_zombie_powerup("blood_hunter_points", "zombie_z_money_icon", &"ZOMBIE_POWERUP_BONUS_POINTS", zm_powerups::func_should_never_drop, 1, 0, 0);
+
+    thread watch_zombieblood();
 }
 
 apply_perk_changes()
@@ -379,13 +409,18 @@ enable_power()
     {
         trig = getEnt("use_" + obj + "_switch", "targetname");
         if(isDefined(trig))
+        {
             trig notify("trigger", level.players[0]);
+        }
     }
 }
 
 hostdev()
 {
-    if(!IS_DEBUG) return;
+    if(!IS_DEBUG)
+    {
+        return;
+    }
 
     if(IS_DEBUG && DEBUG_WAGER_FX)
     {
@@ -397,14 +432,22 @@ hostdev()
         self thread dev_bind();
     }
 
-    if(self util::is_bot()) return;
-    if(!self ishost()) return;
-    if(DEV_GODMODE) self enableInvulnerability();
+    if(self util::is_bot() || !self ishost())
+    {
+        return;
+    }
+
+    if(DEV_GODMODE)
+    {
+        self enableInvulnerability();
+    }
 
     if(DEV_POINTS && (!isdefined(self.max_points_earned) || self.max_points_earned < 25000))
     {
         if(!isdefined(self.max_points_earned))
+        {
             self.max_points_earned = 500;
+        }
         
         self.max_points_earned = int(max(self.max_points_earned * self get_spawn_reduce_mp(), 25000));
         targ_clamped = int(min(MAX_RESPAWN_SCORE, self.max_points_earned));
@@ -412,12 +455,17 @@ hostdev()
         self Event_PointsAdjusted();
     }
 
-    if(DEV_AMMO) self thread dev_ammo();
+    if(DEV_AMMO)
+    {
+        self thread dev_ammo();
+    }
 
     if(DEV_HUD)
     {
         if(isdefined(self.zone_hud))
+        {
             self.zone_hud destroy();
+        }
         
         if(DEBUG_ZONE)
         {
@@ -426,8 +474,15 @@ hostdev()
         }
     }
 
-    if(DEV_NOCLIP) thread ANoclipBind(self);
-    if(DEV_SIGHT) self SetInfraredVision(0);
+    if(DEV_NOCLIP)
+    {
+        thread ANoclipBind(self);
+    }
+    
+    if(DEV_SIGHT)
+    {
+        self SetInfraredVision(0);
+    }
 
     if(level.script == "zm_zod")
     {
@@ -546,6 +601,11 @@ hostdev()
         }
     }
 
+    if(isdefined(DEBUG_WEAPON))
+    {
+        self zm_weapons::weapon_give(getweapon(DEBUG_WEAPON), 0, 0, 1);
+    }
+
     if(DEBUG_TESLA_GUN && isdefined(level.weaponzmteslagun))
     {
         self takeAllWeapons();
@@ -558,6 +618,11 @@ hostdev()
             self zm_weapons::weapon_give(level.weaponzmteslagun, 0, 0, 1);
         }
         
+    }
+
+    if(isdefined(DEV_BGB))
+    {
+        self thread bgb::func_b107a7f3(DEV_BGB, 0);
     }
 
     self thread dev_util_thread();
@@ -649,6 +714,7 @@ GMSpawned()
 	playsoundatposition("zmb_zombie_spawn", self.origin);
     self apply_spawn_cleanup();
     self zm_cosmodrome_spawn_fix();
+    self thread gm_oob_fix();
     self apply_pre_delay_spawn_variables();
     self notify("stop_player_too_many_weapons_monitor");
     self handle_safe_respawn(); // spawn delay is waited in this function
@@ -669,6 +735,20 @@ GMSpawned()
     self thread WatchMaxAmmo();
     self thread debug_delayed();
     self thread watch_falling_forever();
+    self thread bgb_umw_speedthread();
+    self thread tomb_teleport_penalty();
+    self thread zm_genesis_apothicon_monitor();
+    self thread gm_teammate_visibility();
+    
+    if(is_zbr_teambased())
+    {
+        self thread watch_in_combat();
+    }
+
+    if(level.script == "zm_castle")
+    {
+        self.widows_wine_knife_override = serious::widows_wine_knife_override_castle;
+    }
 
     if(!IS_DEBUG || !DEV_NO_WAGERS)
     {
@@ -680,6 +760,24 @@ GMSpawned()
         self thread wager_make_icon();
     }
     self thread do_wager_character_effects();
+
+    if(IS_DEBUG && DEBUG_DEATHS)
+    {
+        self thread monitor_player_death();
+    }
+}
+
+monitor_player_death()
+{
+    if(IS_DEBUG && DEBUG_DEATHS)
+    {
+        self endon("spawned_player");
+        while(true)
+        {
+            self waittill("death");
+            compiler::nprintln(self.name + " got a death notify! BUG!");
+        }
+    }
 }
 
 apply_spawn_cleanup()
@@ -705,12 +803,30 @@ apply_spawn_cleanup()
         self thread gm_spawn_protect(5);
     }
 
+    if(isdefined(self.invis_glow))
+    {
+        self.invis_glow delete();
+    }
+    
+    if(isdefined(self.wgm2_mdl2))
+    {
+        self.wgm2_mdl2 delete();
+    }
+
+    if(isdefined(self.wgm2_mdl))
+    {
+        self.wgm2_mdl delete();
+    }
+
     self setclientuivisibilityflag("hud_visible", true);
 }
 
 gm_spawn_protect(time)
 {
+    self notify("gm_spawn_protect");
+    self endon("gm_spawn_protect");
     self endon("disconnect");
+    self endon("bled_out");
     self endon("spawned_player");
     self.gm_protected = true;
     self disableusability();
@@ -739,6 +855,7 @@ apply_pre_delay_spawn_variables()
     self.v_launch_direction_extra = (0,0,0); // remove cached direction vector for death ragdoll
     self.no_grab_powerup = false; // reset no grab when spawning
     self.power_vacuum = false; // reset power vacuum status
+    self.bgb_freeze_dmg_protect = false; // reset damage protection
 
     self.var_789ebfb2 = false; // afflicted by storm bow attack
     self.zombie_tesla_hit = false; // afflicted by any tesla attack
@@ -752,6 +869,17 @@ apply_pre_delay_spawn_variables()
     self.is_on_fire = false; // fix firestaff burning
     self.var_3f6ea790 = false; // fix mirg2000 aoe
     self.shrinked = false; // fix shrink ray
+    self.var_7dd18a0 = 0; // fix anti-grav killed issue
+    self.gm_thundergunned = false; // fix thundergunned
+    self.no_grab_wager_powerup = false;
+    self.died_by_blood_hunter = false;
+    self.blood_hunter_buff = 0;
+    self.blood_hunter_timer = 0;
+    self.blood_hunter_points = 0;
+    self.pending_damage = 0;
+    self.pending_damage_depth = 0;
+    self.killcamentity = -1;
+    self.var_e1f8edd6 = 0; // affected by spores
 
     self.g_lstaff_nerf_pct = 0.0; // reset lightning staff nerf pct
     self.g_lstaff_nerf_ct = 0; // reset lightning staff shot count
@@ -965,17 +1093,59 @@ nullsub()
     return false;
 }
 
+nullsubtrue()
+{
+    return true;
+}
+
 //thanks extinct for the callback
 _actor_damage_override_wrapper(inflictor, attacker, damage, flags, meansOfDeath, weapon, vPoint, vDir, sHitLoc, vDamageOrigin, psOffsetTime, boneIndex, modelIndex, surfaceType, vSurfaceNormal)
 {
+    if(!isdefined(attacker))
+    {
+        self [[ level._callbackActorDamage ]](inflictor, attacker, damage, flags, meansOfDeath, weapon, vPoint, vDir, sHitLoc, vDamageOrigin, psOffsetTime, boneIndex, modelIndex, surfaceType, vSurfaceNormal);
+        return;
+    }
+
     if(isdefined(attacker.hud_damagefeedback))
     {
         attacker.hud_damagefeedback.color = (1,1,1);
     }
 
+    if(isdefined(self.voiceprefix) && !isdefined(level.bgb_td_pvp_prefix))
+    {
+        level.bgb_td_pvp_prefix = self.voiceprefix;
+    }
+
     if(isdefined(attacker.wager_zm_outgoing_damage))
     {
         damage = int(damage * attacker.wager_zm_outgoing_damage);
+    }
+
+    if(isdefined(self.wager_precision) && self.wager_precision)
+    {
+        if(isdefined(meansofdeath) && meansofdeath == "MOD_HEAD_SHOT")
+        {
+            damage = int(damage * (1 + (2 * WAGER_HEADSHOT_DMG_PCT)));
+        }
+        else
+        {
+            damage = int(damage * WAGER_HEADSHOT_DMG_PCT);
+        }
+    }
+
+    b_is_bowie = isdefined(weapon) && isdefined(level.gm_bowie_knife) && weapon == level.gm_bowie_knife;
+    if(b_is_bowie && isdefined(attacker.wager_gm3_goldknife) && attacker.wager_gm3_goldknife)
+    {
+        damage = self.health + 666;
+    }
+
+    if(isdefined(weapon) && weapon == getweapon("frag_grenade"))
+    {
+        if(isdefined(self.is_zombie) && self.is_zombie)
+        {
+            damage = self.health + 666;
+        }
     }
 
     if(!isdefined(level.gm_rubber_banding_scalar))
@@ -991,6 +1161,13 @@ _actor_damage_override_wrapper(inflictor, attacker, damage, flags, meansOfDeath,
         damage = int(damage * BGB_ARMS_GRACE_ZM_DMG);
     }
 
+    self.lastmeansofdeath = meansOfDeath;
+
+    if(isdefined(attacker) && isdefined(attacker.team) && isdefined(self.team) && self.team == attacker.team)
+    {
+        damage = 0;
+    }
+
     self [[ level._callbackActorDamage ]](inflictor, attacker, damage, flags, meansOfDeath, weapon, vPoint, vDir, sHitLoc, vDamageOrigin, psOffsetTime, boneIndex, modelIndex, surfaceType, vSurfaceNormal);
     if(isdefined(self.is_clone) && self.is_clone) return;
 
@@ -1000,6 +1177,8 @@ _actor_damage_override_wrapper(inflictor, attacker, damage, flags, meansOfDeath,
         if(!isdefined(weapon)) weapon = attacker getCurrentWeapon();
 
         self.power_vacuum = attacker bgb::is_enabled("zm_bgb_power_vacuum");
+        self.wager_zomb_nades = attacker.wager_zomb_nades;
+        self.attacker = attacker;
         if(!(self aat_response(self.health > 0, inflictor, attacker, damage, flags, meansOfDeath, weapon, vpoint, vdir, shitloc, psoffsettime)))
         {
             damageStage = _damage_feedback_get_stage(self);
@@ -1026,22 +1205,63 @@ weapon_is_ds(weapon)
 
 _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = "MOD_UNKNOWN", weapon, vPoint, vDir, sHitLoc, psOffsetTime)
 {
-    if(self laststand::player_is_in_laststand()) return 0;
+    self.pending_damage_depth++;
+    if(self laststand::player_is_in_laststand()) return damage_stack_pop(0);
+    if(self.sessionstate != "playing") return damage_stack_pop(0);
+
+    if(IS_DEBUG && DEBUG_DEATHS && !(self util::is_bot()))
+    {
+        compiler::nprintln(self.name + " was damaged (" + iDamage + ")");
+    }
     
     result = self [[ level._overridePlayerDamage ]](eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath, weapon, vPoint, vDir, sHitLoc, psOffsetTime);
     n_result_cpy = result;
+    b_allow_self_dmg = false;
+
+    if(level.script == "zm_stalingrad" && isdefined(self.var_a0a9409e) && self.var_a0a9409e)
+    {
+        return damage_stack_pop(0);
+    }
+
+    if(isdefined(attacker) && isdefined(attacker.team) && attacker.team == self.team && attacker != self)
+    {
+        return damage_stack_pop(0);
+    }
+
+    if(isdefined(weapon) && weapon == getweapon("frag_grenade"))
+    {
+        if(isdefined(eInflictor.is_wager_grenade) && eInflictor.is_wager_grenade)
+        {
+            if(eInflictor.wager_owner != self)
+            {
+                return damage_stack_pop(0);
+            }
+            n_result_cpy = 75;
+            result = 75;
+            b_allow_self_dmg = true;
+        }
+    }
 
     shrink_multiplier = 1.0f;
     is_explosive = (smeansofdeath == "MOD_PROJECTILE_SPLASH" || smeansofdeath == "MOD_GRENADE" || smeansofdeath == "MOD_GRENADE_SPLASH" || smeansofdeath == "MOD_EXPLOSIVE");
 
-    if(isdefined(self.is_zombie) && self.is_zombie) return result;
+    if(isdefined(self.is_zombie) && self.is_zombie) return damage_stack_pop(result);
+
+    b_is_dragon_whelp = isdefined(weapon) && (weapon.rootweapon.name == "dragon_whelp_turret");
+    if(b_is_dragon_whelp)
+    {
+        attacker = attacker.owner;
+        n_result_cpy = 75;
+        result = 75;
+        iDamage = 75;
+    }
 
     if(IS_DEBUG && DEV_DMG_DEBUG_FIRST && isdefined(weapon) && isdefined(weapon.rootweapon))
-        level.players[0] iPrintLnBold("hasAttacker: " + isdefined(attacker) + ", " + weapon.rootweapon.name + " (^1" + (isdefined(result) ? result : "??") + "^7/^2" + iDamage + "^7) " + sMeansOfDeath);
+        level.players[0] iPrintLnBold("hasAttacker: " + isdefined(attacker) + "(^1" + (isdefined(attacker) ? attacker.team : "?") + "^7/^2" + (isdefined(self.team) ? self.team : "?") + "^7), " + weapon.rootweapon.name + " (^1" + (isdefined(result) ? result : "??") + "^7/^2" + iDamage + "^7) " + sMeansOfDeath);
 
     if(isdefined(self.shrinked) && self.shrinked && (!isdefined(self.shrink_kicked) || !self.shrink_kicked))
     {
-        if(!isdefined(attacker.shrink_damage_refract)) return 0; // shrink ray damage must come from a refraction call
+        if(!isdefined(attacker.shrink_damage_refract)) return damage_stack_pop(0); // shrink ray damage must come from a refraction call
         attacker = attacker.attacker;
         if(!is_explosive)
         {
@@ -1051,9 +1271,17 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
 
     if(isplayer(self) && isdefined(attacker) && isdefined(attacker.b_aat_fire_works_weapon) && attacker.b_aat_fire_works_weapon)
     {
-        attacker = attacker.owner;
-        if(attacker == self) return 0;
-        result = AAT_FIREWORKS_PVP_DAMAGE * level.round_number;
+        if(isdefined(attacker.owner) && isplayer(attacker.owner))
+        {
+            attacker = attacker.owner;
+        }
+        if(attacker == self)
+        {
+            return damage_stack_pop(0);
+        }
+        result = int(AAT_FIREWORKS_PVP_DAMAGE * level.round_number);
+        n_result_cpy = result;
+        iDamage = result;
         weapon = level.weaponnone;
         sMeansOfDeath = "MOD_UNKNOWN";
     }
@@ -1063,13 +1291,14 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
     is_bb = isdefined(level.placeable_mines) && isinarray(level.placeable_mines, weapon);
     is_wg = weapon_is_wg(weapon);
 
-    if(isplayer(attacker) && attacker != self && ((is_ww && smeansofdeath != "MOD_MELEE") || is_bb || is_wg)) result = iDamage;
-    if(isdefined(level.var_25ef5fab) && level.var_25ef5fab == weapon) result = iDamage; // beacon fix
+    if(isplayer(attacker) && attacker != self && ((is_ww && smeansofdeath != "MOD_MELEE") || is_bb || is_wg)) result = int(iDamage);
+    if(isdefined(level.var_25ef5fab) && level.var_25ef5fab == weapon) result = int(iDamage); // beacon fix
+    if(isdefined(weapon) && weapon.rootweapon.name == "quadrotorturret") result = int(level.round_number * 50); // fix quadrotor
 
     if(isdefined(self.staff_succ) && smeansofdeath == "MOD_FALLING" && self.staff_succ) 
     {
         self thread Event_HealthAdjusted();
-        return STAFF_AIR_DMG_PER_TICK;
+        return damage_stack_pop(STAFF_AIR_DMG_PER_TICK);
     }
 
     if(!isdefined(result) || 
@@ -1077,7 +1306,7 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
                                 result <= 0 && !is_tomb_staff(weapon) && !is_ds && 
                                 !is_bb
                             )
-    ) return 0;
+    ) return damage_stack_pop(0);
 
     if(!isdefined(attacker))
     {
@@ -1135,11 +1364,11 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
         if(!b_continue_logic)
         {
             self thread Event_HealthAdjusted();
-            return result;
+            return damage_stack_pop(result);
         }
     }
 
-    if(isdefined(attacker.beastmode) && attacker.beastmode) return 0;
+    if(isdefined(attacker.beastmode) && attacker.beastmode) return damage_stack_pop(0);
 
     if(is_explosive)
     {
@@ -1167,20 +1396,21 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
                 self setVelocity(self getVelocity() + target_velocity);
             }
         }
-        if(self bgb::is_enabled("zm_bgb_danger_closest")) return 0;
+        if(self bgb::is_enabled("zm_bgb_danger_closest")) return damage_stack_pop(0);
     }
 
-    if(smeansofdeath == "MOD_MELEE" && self bgb::is_enabled("zmb_bgb_powerup_burnedout") && !((!isdefined(attacker.is_zombie) || !attacker.is_zombie) && attacker bgb::is_enabled("zm_bgb_pop_shocks"))) return 0;
+    if(smeansofdeath == "MOD_MELEE" && self bgb::is_enabled("zmb_bgb_powerup_burnedout") && !((!isdefined(attacker.is_zombie) || !attacker.is_zombie) && attacker bgb::is_enabled("zm_bgb_pop_shocks"))) return damage_stack_pop(0);
     
     if(IS_DEBUG && DEV_HEALTH_DEBUG)
         self iprintlnbold("Health: " + self.health + ", Max: " + self.maxhealth + ", DMG: " + result + ", Score: " + self.score);
     
-    if(isdefined(attacker.is_zombie) && attacker.is_zombie)
+    b_is_zombie = (isdefined(attacker.is_zombie) && attacker.is_zombie);
+    if(b_is_zombie && !isplayer(attacker))
     {
         if(IS_DEBUG && DEV_BOTS_IGNORE_ZM_DMG && self util::is_bot())
         {
             self.ignoreme = true;
-            return 0;
+            return damage_stack_pop(0);
         }
 
         self.last_player_attacker = undefined;
@@ -1229,6 +1459,12 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
         }
 
         result = target;
+
+        if(result > 45 && isdefined(self.wager_bonus_zm_points) && self.wager_bonus_zm_points && level.players.size > 1)
+        {
+            points = int(result / (level.players.size - 1));
+            self thread wager_gm3_points_reward(points);
+        }
     }
 
     if(is_ds) attacker = attacker.player;
@@ -1244,7 +1480,7 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
     // pretty much guaranteed to be the pendulum trap
     if(iDamage >= self.health && result == 75 && isdefined(level.var_99432870) && level.var_99432870)
     {
-        if(!self hasperk("specialty_armorvest")) result = iDamage;
+        if(!self hasperk("specialty_armorvest")) result = int(iDamage);
         else self setstance("crouch");
         foreach(trig in getentarray("pendulum_buy_trigger", "targetname"))
         {
@@ -1256,10 +1492,11 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
         }
     }
 
-    if(isplayer(attacker) && attacker != self)
+    if(isplayer(attacker) && (b_allow_self_dmg || (attacker != self)))
     {
-        if(isdefined(attacker.wager_pvp_melee_damage) && isdefined(sMeansOfDeath) && sMeansOfDeath == "MOD_MELEE") return 0;
-        if(attacker laststand::player_is_in_laststand() && !(attacker bgb::is_enabled("zm_bgb_self_medication"))) return 0;
+        if((attacker != self) && attacker.team == self.team) return damage_stack_pop(0);
+        if(isdefined(attacker.wager_pvp_melee_damage) && isdefined(sMeansOfDeath) && sMeansOfDeath == "MOD_MELEE") return damage_stack_pop(0);
+        if(attacker laststand::player_is_in_laststand() && !(attacker bgb::is_enabled("zm_bgb_self_medication"))) return damage_stack_pop(0);
         if(!isDefined(weapon)) weapon = attacker getCurrentWeapon();
 
         if(isdefined(self.bgb_kt_frozen) && self.bgb_kt_frozen)
@@ -1272,25 +1509,36 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
             }
             attacker PlayHitMarker("mpl_hit_alert", damageStage, undefined, damagefeedback::damage_feedback_get_dead(self, smeansOfDeath, weapon, damageStage));
             attacker thread _damage_feedback_growth(self, sMeansOfDeath, weapon, result);
-            return 0;
+            return damage_stack_pop(0);
         }
 
-        if(isdefined(sMeansOfDeath) && sMeansOfDeath != "MOD_UNKNOWN")
+        if(!b_is_dragon_whelp && isdefined(sMeansOfDeath) && sMeansOfDeath != "MOD_UNKNOWN")
             result += result * level.player_weapon_boost;
         
         result = int(self GM_AdjustWeaponDamage(weapon, result, n_result_cpy, idamage, sMeansOfDeath, attacker) * shrink_multiplier);
 
-        if(isdefined(level.zombie_vars[attacker.team]["zombie_insta_kill"]) && level.zombie_vars[attacker.team]["zombie_insta_kill"])
+        if(isdefined(level.zombie_vars[attacker.team]["zombie_insta_kill"]) && level.zombie_vars[attacker.team]["zombie_insta_kill"] && !am_i_shrink_kicked())
         {
             result = int(result * INSTAKILL_DMG_PVP_MULTIPLIER);
         }
 
-        if(attacker bgb_ag_active())
+        if(attacker bgb_ag_active() && !am_i_shrink_kicked())
         {
             result = int(result * BGB_ARMS_GRACE_PVP_DMG);
         }
 
-        if(self bgb_any_frozen()) result = int(result * BGB_FROZEN_DAMAGE_REDUX);
+        if(isdefined(self.wager_proximity) && self.wager_proximity && isdefined(attacker.sessionstate) && attacker.sessionstate == "playing")
+        {
+            n_dist = distance(self getOrigin(), attacker GetOrigin());
+            f_progress = min(max(n_dist, WAGER_PROXIMITY_START_DIST), WAGER_PROXIMITY_END_DIST);
+            f_progress = (f_progress - WAGER_PROXIMITY_START_DIST) / (WAGER_PROXIMITY_END_DIST - WAGER_PROXIMITY_START_DIST);
+            result = int(result * lerpfloat(1.0, WAGER_PROXIMITY_BOOST, 1 - f_progress));
+        }
+
+        if(self bgb_any_frozen() || (isdefined(self.bgb_freeze_dmg_protect) && self.bgb_freeze_dmg_protect))
+        {
+            result = int(result * BGB_FROZEN_DAMAGE_REDUX);
+        }
 
         if(isdefined(level.var_653c9585))
         {
@@ -1326,13 +1574,17 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
 
         if(level.b_is_stalingrad)
         {
-            if(weapon == level.w_raygun_mark3lh || weapon == level.w_raygun_mark3lh_upgraded)
-                self thread mark3_slow(weapon == level.w_raygun_mark3lh_upgraded);
+            if(isdefined(weapon))
+            {
+                if(weapon == level.w_raygun_mark3lh || weapon == level.w_raygun_mark3lh_upgraded)
+                {
+                    self thread mark3_slow(weapon == level.w_raygun_mark3lh_upgraded);
+                }
+            }
         }
 
         useJugg = self armor_damage_protected(weapon, smeansofdeath, shitloc);
-
-        if(isdefined(self.wager_pvp_incoming_damage))
+        if(isdefined(self.wager_pvp_incoming_damage) && !am_i_shrink_kicked())
         {
             result = int(result * self.wager_pvp_incoming_damage);
         }
@@ -1341,7 +1593,24 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
             result = int(result * attacker.wager_pvp_outgoing_damage);
         }
 
-        if(useJugg) result = int(result * (1 - level.armorvest_reduction));
+        if(useJugg)
+        {
+            result = int(result * (1 - level.armorvest_reduction));
+        }
+
+        if(isdefined(attacker.blood_hunter_timer) && attacker.blood_hunter_timer && isdefined(attacker.blood_hunter_buff))
+        {
+            result = int(result * (1 + (0.05 * attacker.blood_hunter_buff)));
+        }
+
+        if(isdefined(self.gm_thundergunned) && self.gm_thundergunned)
+        {
+            result = int(min(self.health - 1, result));
+            if(result < 0)
+            {
+                result = 0;
+            }
+        }
 
         if(isdefined(weapon.isriotshield) && weapon.isriotshield)
         {
@@ -1364,35 +1633,75 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
         {
             mod_pointscalar *= attacker.wager_pvp_points_mod;
         }
-        attacker zm_score::add_to_player_score(int(mod_pointscalar * min(result, self.maxhealth)), 1, "gm_zbr_admin");
-        self.last_player_attacker = attacker;
-        self.last_player_attack = gettime();
-        if(!aat_response((self.health - result) <= 0, eInflictor, attacker, result, iDFlags, sMeansOfDeath, weapon, vpoint, vdir, shitloc, psoffsettime))
+
+        if(attacker != self)
         {
-            damageStage = attacker _damage_feedback_get_stage(self, result);
-            if(useJugg) 
+            self.last_player_attacker = attacker;
+            self.last_player_attack = gettime();
+            
+            points_award = mod_pointscalar * min(result, self.maxhealth);
+            if(isdefined(self.wager_bonus_mp_points))
             {
-                if(isdefined(attacker.hud_damagefeedback))
+                if(randomInt(100) <= WAGER_BONUSMP_CHANCE)
                 {
-                    attacker.hud_damagefeedback.color = self GM_GetPlayerColor(true);
+                    points_award *= WAGER_BONUSMP_PCT + 1;
                 }
-                attacker thread damagefeedback::update_override("damage_feedback", "prj_hatchet_impact_armor_heavy", "damage_feedback_armor");
-                self playlocalsound("prj_hatchet_impact_armor_heavy");
             }
-            else 
+
+            if(isdefined(attacker.blood_hunter) && attacker.blood_hunter)
             {
-                if(isdefined(attacker.hud_damagefeedback))
+                if(!isdefined(self.blood_hunter_points))
                 {
-                    attacker.hud_damagefeedback.color = (self.health - result > 0)? self GM_GetPlayerColor(true): (1,1,1);
+                    self.blood_hunter_points = 0;
                 }
-                attacker PlayHitMarker("mpl_hit_alert", damageStage, undefined, damagefeedback::damage_feedback_get_dead(self, smeansOfDeath, weapon, damageStage));
-                attacker thread _damage_feedback_growth(self, sMeansOfDeath, weapon, result);
+                self.blood_hunter_points += int(points_award);
+            }
+            else
+            {
+                attacker zm_score::add_to_player_score(int(points_award), 1, "gm_zbr_admin");
+            }
+            if(!aat_response((self.health - result) <= 0, eInflictor, attacker, result, iDFlags, sMeansOfDeath, weapon, vpoint, vdir, shitloc, psoffsettime))
+            {
+                damageStage = attacker _damage_feedback_get_stage(self, result);
+                if(useJugg) 
+                {
+                    if(isdefined(attacker.hud_damagefeedback))
+                    {
+                        attacker.hud_damagefeedback.color = self GM_GetPlayerColor(true);
+                    }
+                    attacker thread damagefeedback::update_override("damage_feedback", "prj_hatchet_impact_armor_heavy", "damage_feedback_armor");
+                    self playlocalsound("prj_hatchet_impact_armor_heavy");
+                }
+                else 
+                {
+                    if(isdefined(attacker.hud_damagefeedback))
+                    {
+                        attacker.hud_damagefeedback.color = (self.health - result > 0)? self GM_GetPlayerColor(true): (1,1,1);
+                    }
+                    attacker PlayHitMarker("mpl_hit_alert", damageStage, undefined, damagefeedback::damage_feedback_get_dead(self, smeansOfDeath, weapon, damageStage));
+                    attacker thread _damage_feedback_growth(self, sMeansOfDeath, weapon, result);
+                }
             }
         }
     }
     
     self thread Event_HealthAdjusted();
-    return result;
+    return damage_stack_pop(result);
+}
+
+// recursive dodamage fix
+damage_stack_pop(damage)
+{
+    self.pending_damage_depth--;
+    if(self.pending_damage_depth <= 0)
+    {
+        damage += self.pending_damage;
+        self.pending_damage = 0;
+        self.pending_damage_depth = 0;
+        return int(damage);
+    }
+    self.pending_damage += int(damage);
+    return 0;
 }
 
 armor_damage_protected(weapon, smeansofdeath = "MOD_UNKNOWN", shitloc = "none")
@@ -1461,6 +1770,8 @@ GM_AdjustWeaponDamage(weapon, result, n_mod_dmg, iDamage, sMeansOfDeath = "MOD_N
     
     if(isdefined(sMeansOfDeath) && sMeansOfDeath == "MOD_MELEE")
     {
+        b_no_cap = false;
+        n_custom_cap = 0;
         switch(weapon.rootweapon.name)
         {
             case "staff_air_upgraded":
@@ -1479,11 +1790,18 @@ GM_AdjustWeaponDamage(weapon, result, n_mod_dmg, iDamage, sMeansOfDeath = "MOD_N
             case "dragon_gauntlet":
                 result = 2250;
                 break;
+            case "knife_plunger":
+                result = 1250;
+                b_no_cap = true;
+                break;
+            case "melee_katana":
+                n_custom_cap = 30000;
+                break;
             default:
                 result = max(result, 250) * MELEE_DMG_SCALAR;
                 break;
         }
-        result = min(result * level.round_number, MAX_MELEE_DAMAGE);
+        result = min(result * level.round_number, n_custom_cap ? n_custom_cap : (b_no_cap ? (result * level.round_number) : MAX_MELEE_DAMAGE));
         if(isdefined(attacker) && attacker bgb::is_enabled("zm_bgb_sword_flay")) result *= 5;
         if(attacker bgb::is_enabled("zm_bgb_pop_shocks"))
             attacker thread attempt_pop_shocks(self);
@@ -1493,29 +1811,21 @@ GM_AdjustWeaponDamage(weapon, result, n_mod_dmg, iDamage, sMeansOfDeath = "MOD_N
     if(IS_DEBUG && DEV_DMG_DEBUG && isdefined(weapon) && isdefined(weapon.rootweapon))
         level.players[0] iPrintLnBold(weapon.rootweapon.name + " " + result + " " + sMeansOfDeath);
 
+    if(isdefined(level.weapon_scalars_table[weapon.rootweapon.name]))
+    {
+        return result * level.weapon_scalars_table[weapon.rootweapon.name];
+    }
+
     switch(weapon.rootweapon.name)
     {
         case "hero_annihilator":
             return result * (1 + (level.round_number * ANNIHILATOR_DMG_PERCENT_PER_ROUND));
 
-        case "sniper_fastsemi_upgraded":
-        case "sniper_fastsemi":
-            return result * 0.75; // nerfing the drakon, which has way too much dps (still does kek)
-
         case "minigun":
             return int(80 * level.round_number);
-        
-        case "launcher_standard_upgraded":
-            return result * 150;
 
-        case "launcher_multi_upgraded":
-            return result * 100;
-
-        case "launcher_standard":
-            return result * 30;
-
-        case "launcher_multi":
-            return result * 20;
+        case "dragon_whelp_turret":
+            return level.round_number * DRAGON_WHELP_DMG;
 
         case "ray_gun":
             if(sMeansOfDeath == "MOD_PROJECTILE")
@@ -1527,59 +1837,28 @@ GM_AdjustWeaponDamage(weapon, result, n_mod_dmg, iDamage, sMeansOfDeath = "MOD_N
                 return 1200 * level.round_number;
             return 300 * level.round_number;
 
-        case "raygun_mark2":
-            return result * level.round_number;
-
-        case "microwavegundw":
-        case "microwavegunlh":
-            return 1125 * result;
-
-        case "microwavegundw_upgraded":
-        case "microwavegunlh_upgraded":
-            return 5625 * result;
-        
-        case "pistol_c96_upgraded":
-            return result * 40;
-            
-        case "raygun_mark2_upgraded":
-            return result * 50;
-
-        case "raygun_mark3":
-            return result * 18;
-
-        case "raygun_mark3_upgraded":
-            return result * 90;
-
         case "frag_grenade":
             return int(7 * result * level.round_number);
 
         case "frag_grenade_slaughter_slide":
-            return int(7 * result * level.round_number);
+            return int(2 * result * level.round_number);
 
         case "nesting_dolls_single":
             return int(5 * result * level.round_number);
-
-        case "pistol_m1911_upgraded":
-        case "pistol_m1911h_upgraded":
-        case "pistol_revolver38_upgraded":
-        case "pistol_revolver38lh_upgraded":
-        case "pistol_standard_upgraded":
-        case "pistol_standardlh_upgraded":
-            return result * 12;
 
         case "tesla_gun":
             if(sMeansOfDeath == "MOD_PROJECTILE")
             {
                 return 5000 + (500 * level.round_number);
             }
-            return 2500 + (250 * level.round_number);
+            return 1500 + (150 * level.round_number);
 
         case "tesla_gun_upgraded":
             if(sMeansOfDeath == "MOD_PROJECTILE")
             {
                 return 10000 + (1000 * level.round_number);
             }
-            return 5000 + (500 * level.round_number);
+            return 2000 + (250 * level.round_number);
 
         case "sticky_grenade_widows_wine":
             if(IS_DEBUG && DEBUG_WW_DAMAGE) return 1;
@@ -1601,7 +1880,7 @@ GM_AdjustWeaponDamage(weapon, result, n_mod_dmg, iDamage, sMeansOfDeath = "MOD_N
         case "elemental_bow_demongate":
             if(sMeansOfDeath == "MOD_UNKNOWN") return result;
             if(sMeansOfDeath == "MOD_PROJECTILE_SPLASH")
-                return 1000 * level.round_number;
+                return 300 * level.round_number;
             return 2000 * level.round_number;
 
         case "elemental_bow_rune_prison1":
@@ -1610,7 +1889,7 @@ GM_AdjustWeaponDamage(weapon, result, n_mod_dmg, iDamage, sMeansOfDeath = "MOD_N
         case "elemental_bow_demongate1":
             if(sMeansOfDeath == "MOD_UNKNOWN") return result;
             if(sMeansOfDeath == "MOD_PROJECTILE_SPLASH")
-                return 1100 * level.round_number;
+                return 350 * level.round_number;
             return 2100 * level.round_number;
 
         case "elemental_bow_rune_prison2":
@@ -1619,7 +1898,7 @@ GM_AdjustWeaponDamage(weapon, result, n_mod_dmg, iDamage, sMeansOfDeath = "MOD_N
         case "elemental_bow_demongate2":
             if(sMeansOfDeath == "MOD_UNKNOWN") return result;
             if(sMeansOfDeath == "MOD_PROJECTILE_SPLASH")
-                return 1200 * level.round_number;
+                return 400 * level.round_number;
             return 2200 * level.round_number;
 
         case "elemental_bow_rune_prison3":
@@ -1628,7 +1907,7 @@ GM_AdjustWeaponDamage(weapon, result, n_mod_dmg, iDamage, sMeansOfDeath = "MOD_N
         case "elemental_bow_demongate3":
             if(sMeansOfDeath == "MOD_UNKNOWN") return result;
             if(sMeansOfDeath == "MOD_PROJECTILE_SPLASH")
-                return 1300 * level.round_number;
+                return 450 * level.round_number;
             return 2300 * level.round_number;
 
         case "elemental_bow_rune_prison4":
@@ -1637,22 +1916,22 @@ GM_AdjustWeaponDamage(weapon, result, n_mod_dmg, iDamage, sMeansOfDeath = "MOD_N
         case "elemental_bow_demongate4":
             if(sMeansOfDeath == "MOD_UNKNOWN") return result;
             if(sMeansOfDeath == "MOD_PROJECTILE_SPLASH")
-                return 2500 * level.round_number;
+                return 1000 * level.round_number;
             return 2500 * level.round_number;
 
         case "hero_mirg2000":
-            return 500 * level.round_number;
+            return 250 * level.round_number;
         case "hero_mirg2000_1":
-            return 750 * level.round_number;
+            return 500 * level.round_number;
         case "hero_mirg2000_2":
-            return 1000 * level.round_number;
+            return 750 * level.round_number;
         
         case "hero_mirg2000_upgraded":
-            return 1500 * level.round_number;
+            return 1000 * level.round_number;
         case "hero_mirg2000_upgraded_1":
-            return 2500 * level.round_number;
+            return 1500 * level.round_number;
         case "hero_mirg2000_upgraded_2":
-            return 4000 * level.round_number;
+            return 2500 * level.round_number;
 
         case "octobomb":
         case "octobomb_upgraded":
@@ -1669,17 +1948,6 @@ GM_AdjustWeaponDamage(weapon, result, n_mod_dmg, iDamage, sMeansOfDeath = "MOD_N
         case "bouncingbetty":
             return level.round_number * result;
 
-        case "shotgun_energy":
-            return result * 50;
-        case "shotgun_energy_upgraded":
-            return result * 100;
-
-        case "pistol_energy":
-            return result * 2;
-
-        case "pistol_energy_upgraded":
-            return result * 5;
-
         default:
 
             if(!is_tomb_staff(weapon))
@@ -1693,6 +1961,11 @@ GM_AdjustWeaponDamage(weapon, result, n_mod_dmg, iDamage, sMeansOfDeath = "MOD_N
             if(weapon.rootweapon.name == "staff_lightning_upgraded" || weapon.rootweapon.name == "staff_lightning")
             {
                 n_result = int(attacker get_effective_ls_mp() * n_result);
+            }
+
+            if(weapon.rootweapon.name == "staff_fire" || weapon.rootweapon.name == "staff_fire_upgraded")
+            {
+                n_result = int(n_result * FIRE_STAFF_DMG_REDUCTION);
             }
 
         return n_result;
@@ -1787,6 +2060,17 @@ PointRemovedDispatcher()
 
 Event_PointsAdjusted()
 {
+    if(self.sessionstate != "playing")
+    {
+        return;
+    }
+
+    max = self Get_Pointstowin() * 3;
+    if(self.score > max)
+    {
+        self.score = int(max);
+    }
+
     if(!isdefined(self.max_points_earned))
         self.max_points_earned = self.score;
     
@@ -1821,8 +2105,12 @@ Check_GMObjectiveState()
     }
 }
 
-update_gm_speed_boost(ignore_entity = self, n_value = 1)
+update_gm_speed_boost(ignore_entity = self, n_value = 1, b_force = false)
 {
+    if(isdefined(self.blood_hunter_timer) && self.blood_hunter_timer)
+    {
+        return;
+    }
     b_any_objective = false;
     foreach(player in level.players)
     {
@@ -1835,7 +2123,7 @@ update_gm_speed_boost(ignore_entity = self, n_value = 1)
 
     b_use_speed_boost = b_any_objective && !(isdefined(self.gm_objective_state) && self.gm_objective_state);
     b_boosted = self getmovespeedscale() >= GM_MOVESPEED_BOOSTER_MP;
-    if(b_use_speed_boost != b_boosted)
+    if(b_use_speed_boost != b_boosted || b_force)
     {
         self setMoveSpeedScale(b_use_speed_boost ? GM_MOVESPEED_BOOSTER_MP : n_value);
     }
@@ -1944,6 +2232,11 @@ Event_RoundNext()
         level.gm_lastround = level.round_number;
     }
 
+    foreach(player in getplayers())
+    {
+        player thread Event_PointsAdjusted();
+    }
+
     if(level.perk_purchase_limit < 99)
     {
         level.perk_purchase_limit = 99; // fixes the custom maps that limit after spawning 
@@ -1997,16 +2290,20 @@ Event_RoundNext()
 
 Event_ZombieInitDone()
 {
-    if(level.script == "zm_island") self.var_cbbe29a9 = true;
+    if(!isdefined(self))
+    {
+        return;
+    }
     self thread KillOnTimeout();
 }
 
 KillOnTimeout()
 {
     self endon("death");
+    self endon("enemy_cleaned_up");
     self endon("deleted");
     wait ZOMBIE_MAXLIFETIME;
-    if(isdefined(self) && isalive(self))
+    if(isdefined(self) && isalive(self) && isdefined(self.health) && isdefined(self.origin))
         self DoDamage(self.health + 10000, self.origin);
 }
 
@@ -2091,14 +2388,17 @@ player_bgb_buys_1()
 
 PlayerDiedCallback()
 {
+    if(IS_DEBUG && DEBUG_DEATHS)
+    {
+        compiler::nprintln(self.name + " was killed");
+    }
     self.ignoreme++;
     self.origin = self.v_gm_cached_position;
+
     self setclientuivisibilityflag("hud_visible", true);
     self gm_hud_set_visible(self ishost()); // we shouldn't see other player's bars along with our own. Host will never spectate, so theirs will need to be shown
     self cameraactivate(0);
     self setclientthirdperson(0);
-    if(isdefined(level.func_clone_plant_respawn) && isdefined(self.s_clone_plant)) //zetsubou plant func support
-        return;
 
     foreach(player in level.players)
         player UpdateGMProgress(self, true);
@@ -2158,6 +2458,13 @@ GM_FairRespawn()
     self endon("disconnect");
     level endon("end_game");
     self util::waittill_any("bled_out", "spawned_spectator");
+    if(isdefined(self.died_by_blood_hunter) && self.died_by_blood_hunter)
+    {
+        self.died_by_blood_hunter = false;
+        wait 3;
+        self thread wait_and_revive_player();
+        return;
+    }
     if(!USE_MIDROUND_SPAWNS || gm_any_has_objective())
     {
         wait PLAYER_RESPAWN_DELAY;
@@ -2199,22 +2506,73 @@ LoadoutRecorder()
     {
         self util::waittill_any_timeout(2, "weapon_change", "weapon_give");
         if(self laststand::player_is_in_laststand())
+        {
             continue;
-        
+        }
+
         if(self.sessionstate == "spectator")
+        {
             continue;
+        }
+
+        w_current = self getCurrentWeapon();
+
+        if(isdefined(w_current))
+        {
+            if(w_current.isflourishweapon)
+            {
+                continue;
+            }
+            if(self zm_utility::is_player_revive_tool(w_current))
+            {
+                continue;
+            }
+
+            if(isdefined(level.var_c92b3b33) && level.var_c92b3b33 == w_current)
+            {
+                continue;
+            }
+
+            if(isdefined(level.var_adfa48c4) && level.var_adfa48c4 == w_current)
+            {
+                continue;
+            }
+        }
+
+        if(isdefined(self.is_drinking) && self.is_drinking > 0)
+        {
+            continue;
+        }
+
+        // fix emphemeral enhancement
+        w_ignore_weapon = undefined;
+        if(isdefined(self.var_fb11234e))
+        {
+            w_ignore_weapon = zm_weapons::get_upgrade_weapon(self.var_fb11234e);
+        }
 
         self.catalyst_loadout = [];
         foreach(weapon in self GetWeaponsList())
         {
             if(!isdefined(weapon))
+            {
                 continue;
+            }
             
             if(weapon.name == "minigun")
+            {
                 continue;
+            }
 
             if(weapon.name == level.w_widows_wine_grenade.name)
+            {
                 continue;
+            }
+
+            if(isdefined(w_ignore_weapon) && weapon == w_ignore_weapon)
+            {
+                weapon = self.var_fb11234e;
+            }
             
             struct = spawnstruct();
             struct.weapon = weapon;
@@ -2238,6 +2596,7 @@ GiveCatalystLoadout()
         self takeWeapon(weapon);
 
     num_given = 0;
+    hero = undefined;
     foreach(item in self.catalyst_loadout)
     {
         weapon = item.weapon;
@@ -2248,26 +2607,36 @@ GiveCatalystLoadout()
 
         if(weapon.name == "minigun")
             continue;
-        
+
         switch(true)
         {
             case zm_utility::is_hero_weapon(weapon):
-                if(weapon.rootweapon.name == "skull_gun")
+                if(level.script == "zm_stalingrad") // dragon gauntlet bug
                 {
-                    self flag::set("has_skull");
+                    break;
                 }
-                self zm_magicbox::give_hero_weapon(weapon);
+                if(level.script == "zm_island") // skull bug
+                {
+                    break;
+                }
+                hero = weapon;
+            break;
+            case zm_utility::is_tactical_grenade(weapon):
+                self zm_weapons::weapon_give(weapon, 0, 0, 1, 0);
+                if(isdefined(weapon.maxammo))
+                {
+                    self SetWeaponAmmoStock(weapon, int(max(1, weapon.maxammo - TAC_GRENADE_REDUCTION)));
+                }
             break;
             case zm_utility::is_melee_weapon(weapon):
             case zm_utility::is_lethal_grenade(weapon):
-            case zm_utility::is_tactical_grenade(weapon):
             case zm_utility::is_placeable_mine(weapon):
             case zm_utility::is_offhand_weapon(weapon):
                 self zm_weapons::weapon_give(weapon, 0, 0, 1, 0);
             break;
 
             default:
-                if(num_given < zm_utility::get_player_weapon_limit(self))
+                if(zbr_count_weapons(self getWeaponsListPrimaries()) < zm_utility::get_player_weapon_limit(self))
                 {
                     if(is_upgraded_tomb_staff(weapon))
                     {
@@ -2283,13 +2652,19 @@ GiveCatalystLoadout()
                     self GiveWeapon(weapon, options, acvi);
                     self switchtoweaponimmediate(weapon);
                     GiveAAT(self, item.aat, false, weapon);
-                    num_given++;
+                    wait 0.05;
                 }
             break;
         }
     }
 
-    if(self getWeaponsListPrimaries().size < 1)
+    self wager_gm3_bowie();
+    if(isdefined(hero))
+    {
+        self thread give_hero_weapon(hero);
+    }
+
+    if(zbr_count_weapons(self getWeaponsListPrimaries()) < 1)
     {
         wpn = (level.round_number < 10) ? getweapon("ar_accurate") : getweapon("ar_accurate_upgraded");
         self giveWeapon(wpn);
@@ -2298,6 +2673,38 @@ GiveCatalystLoadout()
     }
 
     self notify("loadout_returned");
+}
+
+zbr_count_weapons(list)
+{
+    count = 0;
+    foreach(weapon in list)
+    {
+        b_invalid = zm_utility::is_tactical_grenade(weapon) || zm_utility::is_hero_weapon(weapon);
+        b_invalid = b_invalid || zm_utility::is_offhand_weapon(weapon) || zm_utility::is_melee_weapon(weapon);
+        b_invalid = b_invalid || zm_utility::is_lethal_grenade(weapon) || zm_utility::is_placeable_mine(weapon);
+        if(!b_invalid)
+        {
+            count++;
+        }
+    }
+    return count;
+}
+
+give_hero_weapon(weapon)
+{
+	w_previous = self getcurrentweapon();
+	self zm_weapons::weapon_give(weapon);
+    self gadgetpowerset(0, 99);
+	self switchtoweapon(weapon);
+	self util::waittill_any_timeout(1, "weapon_change_complete");
+	self setlowready(1);
+	self switchtoweapon(w_previous);
+	self util::waittill_any_timeout(1, "weapon_change_complete");
+	self setlowready(0);
+    self gadgetpowerset(0, 100);
+    wait 1;
+	self gadgetpowerset(0, 0);
 }
 
 GiveAAT(player, aat, print=true, weapon)
@@ -2314,6 +2721,7 @@ GiveAAT(player, aat, print=true, weapon)
 
 PlayerDownedCallback(eInflictor, eAttacker, iDamage, sMeansOfDeath, weapon, vDir, sHitLoc, psOffsetTime, deathAnimDuration)
 {
+    self.gm_objective_state = false;
     if(isdefined(eattacker) && isplayer(eattacker) && eattacker != self)
     {
         if(eAttacker.sessionstate == "playing" && isdefined(eattacker.wager_gm2_rewards) && eattacker.wager_gm2_rewards)
@@ -2335,6 +2743,11 @@ PlayerDownedCallback(eInflictor, eAttacker, iDamage, sMeansOfDeath, weapon, vDir
             }
         }
     }
+
+    if(IS_DEBUG && DEBUG_DEATHS)
+    {
+        compiler::nprintln(self.name + " was downed");
+    }
     if(self hasperk("specialty_quickrevive") || self bgb::is_enabled("zm_bgb_self_medication") || 
         self bgb::is_enabled("zm_bgb_phoenix_up") || self bgb::is_enabled("zm_bgb_coagulant"))
     {
@@ -2346,82 +2759,202 @@ PlayerDownedCallback(eInflictor, eAttacker, iDamage, sMeansOfDeath, weapon, vDir
             self unlink();
             self thread anywhere_but_here_activation();
         }
-        else if(!self bgb::is_enabled("zm_bgb_self_medication"))
+        else
         {
-            self thread zm::wait_and_revive();
-            self unlink();
-            self thread anywhere_but_here_activation();
+            if(self bgb::is_enabled("zm_bgb_self_medication"))
+            {
+                self thread wait_and_clear_revive();
+            }
+            else
+            {
+                self thread hide_while_downed();
+                self thread zm::wait_and_revive();
+                self unlink();
+                self thread anywhere_but_here_activation();
+            }
         }
     }
     else
     {
-        if(isdefined(eAttacker) && isdefined(eAttacker._trap_type)) eAttacker = eAttacker.activated_by_player;
-        if(weapon_is_ds(weapon)) eAttacker = eAttacker.player;
-        if(isdefined(eAttacker) && isplayer(eAttacker) && eAttacker != self)
+        self thread player_downed_async(eInflictor, eAttacker, iDamage, sMeansOfDeath, weapon, vDir, sHitLoc, psOffsetTime, deathAnimDuration);
+    }
+    self [[ level._callbackPlayerLastStand ]](eInflictor, eAttacker, iDamage, sMeansOfDeath, weapon, vDir, sHitLoc, psOffsetTime, deathAnimDuration);
+}
+
+hide_while_downed()
+{
+    self endon("bled_out");
+    self endon("disconnect");
+    while(self laststand::player_is_in_laststand())
+    {
+        self hide();
+        msg = self util::waittill_any_timeout(0.1, "player_revived");
+        if(msg == "player_revived")
         {
-            if(eAttacker.sessionstate == "playing" && isdefined(eAttacker.wager_gun_game) && eAttacker.wager_gun_game)
-            {
-                eAttacker thread wager_gg_swap();
-            }
-            self.power_vacuum = eAttacker bgb::is_enabled("zm_bgb_power_vacuum");
-            level.gm_last_killed_ent = self;
-            eAttacker notify(#"hash_935cc366");
-            eAttacker AddRankXp("kill", weapon, undefined, false, true, 100);
-            if(!zm_utility::is_hero_weapon(weapon) && eattacker.sessionstate == "playing" && !zm_utility::is_hero_weapon(eattacker getCurrentWeapon()))
-            {
-                power = eattacker gadgetpowerget(0);
-                if(isdefined(power) && power < 100)
-                {
-                    power = int(min(power + GADGET_PWR_PER_KILL, 100));
-                    eattacker GadgetPowerSet(0, power);
-                }
-            }
-            scoreevents::processScoreEvent("kill_mechz", eAttacker);
-            eAttacker playlocalsound("prj_bullet_impact_headshot_helmet_nodie_2d");
+            break;
         }
+    }
+    self show();
+}
 
-        KillHeadIcons(self);
-        //self notify("bled_out");
-        CleanupMusicCheck();
-        self.score = 1;
-        self.maxhealth = 1;
-        self Check_GMObjectiveState();
+wait_and_clear_revive()
+{
+    wait 1;
+    self notify("remote_revive");
+}
 
-        self set_death_launch_velocity(eAttacker, weapon, sMeansOfDeath, vDir);
+player_downed_async(eInflictor, eAttacker, iDamage, sMeansOfDeath, weapon, vDir, sHitLoc, psOffsetTime, deathAnimDuration)
+{
+    if(isdefined(eAttacker) && isdefined(eAttacker._trap_type))
+    {
+        eAttacker = eAttacker.activated_by_player;
+    }
 
-        n_launch_magnitude = min(10, int(iDamage / 1000)) * 25;
-        if(isdefined(self.launch_magnitude_extra)) 
-            n_launch_magnitude += self.launch_magnitude_extra;
+    if(weapon_is_ds(weapon))
+    {
+        eAttacker = eAttacker.player;
+    }
 
-        v_launch_direction_extra = (0,0,0);
-        if(isdefined(self.v_launch_direction_extra)) v_launch_direction_extra = self.v_launch_direction_extra;
-        self wager_show_self_items();
-        clone = self ClonePlayer(1, weapon, eattacker);
+    if(isdefined(eAttacker) && isplayer(eAttacker) && eAttacker != self)
+    {
+        if(eAttacker.sessionstate == "playing" && isdefined(eAttacker.wager_gun_game) && eAttacker.wager_gun_game)
+        {
+            eAttacker thread wager_gg_swap();
+        }
+        if(isdefined(eattacker.blood_hunter) && eattacker.blood_hunter)
+        {
+            eattacker thread blood_hunter_buff();
+            self.died_by_blood_hunter = true;
+        }
+        self.power_vacuum = eAttacker bgb::is_enabled("zm_bgb_power_vacuum");
+        level.gm_last_killed_ent = self;
+        if(eAttacker bgb::is_enabled("zm_bgb_self_medication"))
+        {
+            eAttacker thread bgb::function_7d63d2eb();
+            eAttacker notify(#"hash_935cc366");
+        }
+        eAttacker AddRankXp("kill", weapon, undefined, false, true, 100);
+        if(!zm_utility::is_hero_weapon(weapon) && eattacker.sessionstate == "playing" && !zm_utility::is_hero_weapon(eattacker getCurrentWeapon()))
+        {
+            power = eattacker gadgetpowerget(0);
+            if(isdefined(power) && power < 100)
+            {
+                power = int(min(power + GADGET_PWR_PER_KILL, 100));
+                eattacker GadgetPowerSet(0, power);
+            }
+        }
+        scoreevents::processScoreEvent("kill_mechz", eAttacker);
+        eAttacker playlocalsound("prj_bullet_impact_headshot_helmet_nodie_2d");
+    }
+
+    if(isdefined(level.bgb_td_pvp_prefix) && bgb::is_team_enabled("zm_bgb_tone_death"))
+    {
+        self thread bgb_td_activate();
+    }
+
+    KillHeadIcons(self);
+    CleanupMusicCheck();
+    self.score = 1;
+    self.maxhealth = 1;
+    self Check_GMObjectiveState();
+    self set_death_launch_velocity(eAttacker, weapon, sMeansOfDeath, vDir);
+
+    n_launch_magnitude = min(10, int(iDamage / 1000)) * 25;
+    if(isdefined(self.launch_magnitude_extra)) 
+    {
+        n_launch_magnitude += self.launch_magnitude_extra;
+    }
+
+    v_launch_direction_extra = (0,0,0);
+    if(isdefined(self.v_launch_direction_extra))
+    {
+        v_launch_direction_extra = self.v_launch_direction_extra;
+    }
+
+    self wager_show_self_items();
+    clone = self ClonePlayer(1, weapon, eattacker);
+
+    if(gm_using_killcams())
+    {
+        wasteamkill = isdefined(eAttacker) && isdefined(eAttacker.team) && eAttacker.team == self.team;
+        lpattacknum = eAttacker getentitynumber();
+        deathtime = GetTime();
+        do_cam = !self util::is_bot() && !wasteamkill && (smeansofdeath != "MOD_SUICIDE") && (!(!isdefined(eAttacker) || eAttacker.classname == "trigger_hurt" || eAttacker.classname == "worldspawn" || eAttacker == self || isdefined(eAttacker.disablefinalkillcam)));
+        if(do_cam)
+        {
+            if(!isdefined(self.killcam_params))
+            {
+                self.killcam_params = spawnStruct();
+            }
+            self.cancelkillcam = 0;
+            self.killcam_params.eInflictor = eInflictor;
+            self.killcam_params.eAttacker = eAttacker;
+            self.killcam_params.iDamage = iDamage;
+            self.killcam_params.sMeansOfDeath = sMeansOfDeath;
+            self.killcam_params.weapon = weapon;
+            self.killcam_params.vDir = vDir;
+            self.killcam_params.sHitLoc = sHitLoc;
+            self.killcam_params.psOffsetTime = psOffsetTime;
+            self.killcam_params.deathAnimDuration = deathAnimDuration;
+            if(isdefined(level.killcam_record_settings) && isdefined(level.killcam_get_killcam_entity_info))
+            {
+                killcam_entity_info = [[ level.killcam_get_killcam_entity_info ]](eAttacker, einflictor, weapon);
+                level thread [[ level.killcam_record_settings ]](lpattacknum, self getentitynumber(), weapon, smeansofdeath, deathtime, 0, psoffsettime, killcam_entity_info, array(), array(), eAttacker);
+            }
+            if(isdefined(level.killcam_cancel_on_use))
+            {
+                self thread [[ level.killcam_cancel_on_use ]]();
+            }
+            if(isdefined(level.run_killcam))
+            {
+                self [[ level.run_killcam ]](lpattacknum, self getentitynumber(), killcam_entity_info, weapon, smeansofdeath, deathtime, 0, psoffsettime, false, 10, array(), array(), eAttacker, false);
+            }
+        }
+        else
+        {
+            self cameraactivate(1);
+            self CameraSetPosition(self geteye());
+            self CameraSetLookAt(clone);
+        }
+    }
+    else
+    {
         self cameraactivate(1);
         self CameraSetPosition(self geteye());
         self CameraSetLookAt(clone);
-        clone.ignoreme = true;
-        clone.team = level.zombie_team;
-        clone setteam(level.zombie_team);
-        clone startragdoll(1);
-        clone launchragdoll(vectornormalize(vDir + v_launch_direction_extra) * n_launch_magnitude);
-        clone thread DeleteAfter30();
-        self.ignoreme++;
-        self.no_grab_powerup = true;
-        self hide();
-        self setclientuivisibilityflag("hud_visible", false);
-        self gm_hud_set_visible(false);
-        if(player_can_drop_powerups(self, weapon))
-        {
-            trace = groundtrace(self.origin + vectorscale((0, 0, 1), 5), self.origin + vectorscale((0, 0, -1), 300), 0, undefined);
-			origin = trace["position"];
-            level zm_spawner::zombie_delay_powerup_drop(origin);
-            self widows_wine_drop_grenade(eattacker, weapon);
-        }
-        self.v_gm_cached_position = self.origin;
-        self setorigin((0,0,30000));
     }
-    self [[ level._callbackPlayerLastStand ]](eInflictor, eAttacker, iDamage, sMeansOfDeath, weapon, vDir, sHitLoc, psOffsetTime, deathAnimDuration);
+
+    clone.ignoreme = true;
+    clone.team = "allies";
+    clone setteam("allies");
+    clone startragdoll(1);
+    clone launchragdoll(vectornormalize(vDir + v_launch_direction_extra) * n_launch_magnitude);
+    clone thread DeleteAfter30();
+    self.ignoreme++;
+    self.no_grab_powerup = true;
+    self hide();
+    self setclientuivisibilityflag("hud_visible", false);
+    self gm_hud_set_visible(false);
+    trace = groundtrace(self.origin + vectorscale((0, 0, 1), 5), self.origin + vectorscale((0, 0, -1), 300), 0, undefined);
+    origin = trace["position"];
+    if(player_can_drop_powerups(self, weapon))
+    {
+        level zm_spawner::zombie_delay_powerup_drop(origin);
+        self widows_wine_drop_grenade(eattacker, weapon);
+    }
+    self.v_gm_cached_position = self.origin;
+    self setorigin(isdefined(level.gm_override_downed_spot) ? level.gm_override_downed_spot : (0,0,30000));
+    wait 0.05;
+    if(isdefined(self.blood_hunter_points) && self.blood_hunter_points > 0)
+    {
+        mdl = zm_powerups::specific_powerup_drop("blood_hunter_points", origin, undefined, undefined, 0.1);
+        mdl.blood_hunter_points = int(max(0, min(WAGER_MAX_BH_POINTS, self.blood_hunter_points)));
+        mdl.bh_owner = self;
+        mdl clientfield::set("powerup_fx", 0);
+        playfxontag("zombie/fx_powerup_on_red_zmb", mdl, "tag_origin");
+        level thread powerup_fixup(mdl);
+    }
+    self.blood_hunter_points = 0;
 }
 
 set_death_launch_velocity(e_attacker, w_weapon, sMeansOfDeath, vDir)
@@ -2487,6 +3020,8 @@ GM_BeginCountdown()
 {
     self endon("bled_out");
     self endon("disconnect");
+    self notify("GM_BeginCountdown");
+    self endon("GM_BeginCountdown");
     level endon("end_game");
     self.gm_objective_timesurvived = 0;
 
@@ -2499,12 +3034,50 @@ GM_BeginCountdown()
         player thread wait_and_revive_player(prefixCol + self.name + "^7 has reached the score limit!");
     }
 
+    CleanupMusicCheck();
     GM_StartMusic();
 
     while(self.gm_objective_state)
     {
         wait 1;
         while(bgb::is_team_active("zm_bgb_killing_time") || bgb::is_team_active("zm_bgb_fear_in_headlights")) wait 0.25;
+        while(isdefined(self.beastmode) && self.beastmode) wait 0.25;
+        
+        if(level.script == "zm_theater" && isdefined(self.is_teleporting) && self.is_teleporting)
+        {
+            while((distance2d(self.origin, (-7, -285, 320)) < 200) || (isdefined(self.is_teleporting) && self.is_teleporting))
+            {
+                wait 1;
+            }
+        }
+
+        if(level.script == "zm_stalingrad")
+        {
+            zone = self zm_zonemgr::get_player_zone();
+            while(isdefined(zone) && (zone == "pavlovs_C_zone" || zone == "pavlovs_B_zone" || zone == "pavlovs_A_zone"))
+            {
+                wait 1;
+                zone = self zm_zonemgr::get_player_zone();
+            }
+            while(isdefined(self.var_a0a9409e) && self.var_a0a9409e)
+            {
+                wait 1;
+            }
+        }
+
+        if(level.script == "zm_castle")
+        {
+            zone = self zm_zonemgr::get_player_zone();
+            b_rocket_firing = isdefined(level flag::get("rocket_firing")) && level flag::get("rocket_firing");
+            b_at_pad = isdefined(zone) && (zone == "zone_v10_pad" || zone == "zone_v10_pad_door" || zone == "zone_v10_pad_exterior");
+            while(b_rocket_firing && b_at_pad)
+            {
+                zone = self zm_zonemgr::get_player_zone();
+                b_rocket_firing = isdefined(level flag::get("rocket_firing")) && level flag::get("rocket_firing");
+                b_at_pad = isdefined(zone) && (zone == "zone_v10_pad" || zone == "zone_v10_pad_door" || zone == "zone_v10_pad_exterior");
+                wait 1;
+            }
+        }
 
         if(!self.gm_objective_state)
         {
@@ -2512,7 +3085,6 @@ GM_BeginCountdown()
         }
         
         self.gm_objective_timesurvived++;
-
         foreach(player in level.players)
         {
             player UpdateGMProgress(self);
@@ -2537,8 +3109,14 @@ GM_BeginCountdown()
         if(!isdefined(level.gm_winner))
             level.gm_winner = self;
 
+        self.gm_winner = true;
+        calc_player_lb_ranks();
         foreach(player in level.players)
         {
+            if(is_zbr_teambased() && player.team == self.team)
+            {
+                player.gm_winner = true;
+            }
             if(player == self) continue;
             player.max_points_earned = int(min(player.max_points_earned, self.max_points_earned - 1));
         }
@@ -2547,6 +3125,48 @@ GM_BeginCountdown()
         level notify("end_game");
         return;
     }
+}
+
+calc_player_lb_ranks()
+{
+    level.zbr_leaderboard = [];
+    level.zbr_leaderboard[0] = level.gm_winner;
+    players = getplayers();
+    arrayremovevalue(players, level.gm_winner, false);
+    while(players.size)
+    {
+        highest = undefined;
+        foreach(player in players)
+        {
+            team_match = !is_zbr_teambased() || player.team == level.gm_winner.team;
+            if(is_zbr_teambased() && isdefined(highest) && (highest.team == level.gm_winner.team) && !team_match)
+            {
+                continue;
+            }
+            if(!isdefined(highest) || (player.max_points_earned > highest.max_points_earned) || (team_match && (highest.team != level.gm_winner.team)))
+            {
+                highest = player;
+            }
+        }
+        level.zbr_leaderboard[level.zbr_leaderboard.size] = highest;
+        arrayremovevalue(players, player, false);
+    }
+}
+
+get_player_lb_rank()
+{
+    if(!isdefined(level.zbr_leaderboard))
+    {
+        return 0;
+    }
+    for(i = 0; i < level.zbr_leaderboard.size; i++)
+    {
+        if(level.zbr_leaderboard[i] == self)
+        {
+            return i;
+        }
+    }
+    return 255;
 }
 
 wait_and_revive_player(text) // players killed right when objective is completed will now respawn properly
@@ -2563,8 +3183,12 @@ wait_and_revive_player(text) // players killed right when objective is completed
 CleanupMusicCheck()
 {
     foreach(player in level.players)
+    {
         if(player.sessionstate == "playing" && isdefined(player.gm_objective_state) && player.gm_objective_state)
+        {
             return;
+        }
+    }
     GM_KillMusic();
 }
 
@@ -2621,10 +3245,10 @@ end_game_hud(player, game_over, survived)
     game_over.color = (1, 1, 1);
     game_over.hidewheninmenu = 1;
 
-    tPrefix = (isdefined(level.gm_winner) && level.gm_winner == player) ? "^2" : "^1";
+    tPrefix = (isdefined(level.gm_winner) && level.gm_winner.team == player.team) ? "^2" : "^1";
 
     if(isdefined(level.gm_winner))
-        game_over setText(tPrefix + toupper(level.gm_winner.name) + " ^7WINS");
+        game_over setText(tPrefix + (is_zbr_teambased() ? toupper(level.gm_winner get_zbr_team_color_name()) : toupper(level.gm_winner.name)) + " ^7WINS");
     else
         game_over setText("ROUND DRAW");
     
@@ -2659,11 +3283,35 @@ end_game_hud(player, game_over, survived)
         mbt.hidewheninmenu = 1;
         mbt.foreground = true;
     }
+
+    other_players = player createText("default", 1.25, "CENTER", "BOTTOM", 0, -30, 1, 1, player gm_get_losers(), (1,1,1));
+    other_players.hidewheninmenu = 1;
+    other_players.foreground = true;
+
     credits = player createText("default", 1.25, "CENTER", "BOTTOM", 0, -50, 1, 0.5, "Thank you for playing Zombie Blood Rush, by Serious", (1,1,1));
     credits.hidewheninmenu = 1;
     credits.foreground = true;
+
     mbt thread KillOnIntermission(survived);
     credits thread KillOnIntermission(survived);
+    other_players thread KillOnIntermission(survived);
+}
+
+gm_get_losers()
+{
+    str_placements = "";
+    places = ["^72nd", "^73rd", "^74th"];
+    for(i = 1; i < level.zbr_leaderboard.size && i < 4; i++)
+    {
+        player = level.zbr_leaderboard[i];
+        place = places[i - 1];
+        str_placements += place + ": " + ((player == self) ? "^2" : "^7") + player.name;
+        if((i + 1) != level.zbr_leaderboard.size)
+        {
+            str_placements += "^7, ";
+        }
+    }
+    return str_placements;
 }
 
 KillOnIntermission(h)
@@ -2681,7 +3329,7 @@ GM_MBXP()
         self.max_points_earned = 0;
         
     max_points_earned = self.max_points_earned;
-    if(max_points_earned > WIN_NUMPOINTS)
+    if(max_points_earned > WIN_NUMPOINTS || (isdefined(self.gm_winner) && self.gm_winner))
         max_points_earned = WIN_NUMPOINTS;
 
     n_reward = max_points_earned / 50;
@@ -2704,7 +3352,7 @@ GM_MBVIALS()
         self.max_points_earned = 0;
         
     max_points_earned = self.max_points_earned;
-    if(max_points_earned > WIN_NUMPOINTS)
+    if(max_points_earned > WIN_NUMPOINTS || (isdefined(self.gm_winner) && self.gm_winner))
         max_points_earned = WIN_NUMPOINTS;
 
     numvials = int(max_points_earned / int(WIN_NUMPOINTS / 5));
@@ -2747,6 +3395,8 @@ gm_spectator()
 #define CLIENT_BLUE = 1;
 #define CLIENT_YELLOW = 2;
 #define CLIENT_GREEN = 3;
+#define TEAM_BOX_BORDER_SIZE = 2;
+#define HUD_BOX_HEIGHT = 8;
 GM_CreateHUD()
 {
     self notify("GM_CreateHUD");
@@ -2765,31 +3415,163 @@ GM_CreateHUD()
     if(!isdefined(self._bars))
         self._bars = [];
 
+    if(!isdefined(self._team_bgs))
+    {
+        self._team_bgs = [];
+    }
+
     if(!isdefined(self.gm_hud_hide))
         self.gm_hud_hide = false;
 
+    if(is_zbr_teambased())
+    {
+        teammates = self get_zbr_teammates();
+    }
+    
+    y_pos_base = ((self issplitscreen()) ? (BASE_OFFSET - 55) : BASE_OFFSET) + (is_zbr_teambased() ? ((get_zbr_teamsize() - 1) * -15) : 0);
     if(!isdefined(self._bars[self GetEntityNumber()]))
     {
-        self._bars[self GetEntityNumber()] = self CreateProgressBar("LEFT", "LEFT", 15, BASE_OFFSET + 0, 50, 8, self GM_GetPlayerColor(), 0);
+        self._bars[self GetEntityNumber()] = self CreateProgressBar("LEFT", "LEFT", 15, y_pos_base, 50, HUD_BOX_HEIGHT, self GM_GetPlayerColor(), 1);
         self._bars[self GetEntityNumber()].player = self;
-        self._bars[self GetEntityNumber()].box = self CreateCheckBox("LEFT", "LEFT", 67, BASE_OFFSET + 0, 8, self GM_GetPlayerColor(true), 0);
+        self._bars[self GetEntityNumber()].box = self CreateCheckBox("LEFT", "LEFT", 67, y_pos_base, HUD_BOX_HEIGHT, self GM_GetPlayerColor(true), 1);
     }
     
     self UpdateGMProgress(self);
 
-    i = -10;
+    // start at base offset, our team is always the bottom
+    teams = gm_get_all_teams();
+    team_offsets = [];
+    team_offsets[self.team] = 0;
+
+    // calc preallocated spaces for other teams
+    previous_team = team_offsets[self.team];
+    foreach(team in teams)
+    {
+        if(team == self.team) continue;
+        team_offsets[team] = previous_team + ((is_zbr_teambased() ? get_zbr_teamsize() : 1) * -10) + int(is_zbr_teambased() * -5);
+        previous_team = team_offsets[team];
+    }
+
+    team_offsets[self.team] -= 10;
+
     foreach(player in level.players)
     {
         if(player == self) continue;
         if(!isdefined(self._bars[player GetEntityNumber()]))
         {
-            self._bars[player GetEntityNumber()] = self CreateProgressBar("LEFT", "LEFT", 15, BASE_OFFSET + i, 50, 8, player GM_GetPlayerColor(), 0);
+            y_pos = y_pos_base + team_offsets[player.team];
+            self._bars[player GetEntityNumber()] = self CreateProgressBar("LEFT", "LEFT", 15, y_pos, 50, HUD_BOX_HEIGHT, player GM_GetPlayerColor(), 1);
             self._bars[player GetEntityNumber()].player = player;
-            self._bars[player GetEntityNumber()].box = self CreateCheckBox("LEFT", "LEFT", 67, BASE_OFFSET + i, 8, player GM_GetPlayerColor(true), 0);
+            self._bars[player GetEntityNumber()].box = self CreateCheckBox("LEFT", "LEFT", 67, y_pos, HUD_BOX_HEIGHT, player GM_GetPlayerColor(true), 1);
+            team_offsets[player.team] += -10;
         }
-        i -= 10;
         self UpdateGMProgress(player);
     }
+
+    if(is_zbr_teambased() && (get_zbr_teamsize() > 1))
+    {
+        foreach(team in teams)
+        {
+            if(isdefined(self._team_bgs[team]))
+            {
+                continue;
+            }
+            
+            upper = self gm_find_highest_y_box(team);
+            lower = self gm_find_lowest_y_box(team);
+
+            if(!isdefined(upper) || !isdefined(lower))
+            {
+                continue;
+            }
+
+            upper.y += int(HUD_BOX_HEIGHT / 2);
+            lower.y -= int(HUD_BOX_HEIGHT / 2);
+
+            box_w = lower.x - upper.x + HUD_BOX_HEIGHT;
+            box_h = upper.y - lower.y;
+
+            box_x = upper.x;
+            box_y = upper.y - int((upper.y - lower.y) / 2);
+            
+            self._team_bgs[team] = self createRectangle("LEFT", "LEFT", box_x - TEAM_BOX_BORDER_SIZE, box_y, int(box_w + (TEAM_BOX_BORDER_SIZE * 2)), int(box_h + (TEAM_BOX_BORDER_SIZE * 2)), lower.player GM_GetPlayerColor(true, true), "white", 0, 1);
+        }
+    }
+}
+
+gm_find_highest_y_box(team = self.team)
+{
+    if(!isdefined(self._bars))
+    {
+        return undefined;
+    }
+
+    y_pos = undefined;
+    x_pos = undefined;
+    foreach(bar in self._bars)
+    {
+        if(!isdefined(bar.player)) continue;
+        if(bar.player.team != team) continue;
+        if(!isdefined(y_pos) || bar.bg.y > y_pos)
+        {
+            y_pos = bar.bg.y;
+            x_pos = bar.bg.x;
+        }
+    }
+
+    if(!isdefined(x_pos))
+    {
+        return undefined;
+    }
+
+    stru = spawnStruct();
+    stru.x = x_pos;
+    stru.y = y_pos;
+    return stru;
+}
+
+gm_find_lowest_y_box(team)
+{
+    if(!isdefined(self._bars))
+    {
+        return undefined;
+    }
+
+    y_pos = undefined;
+    x_pos = undefined;
+    __player = undefined;
+    foreach(bar in self._bars)
+    {
+        if(!isdefined(bar.player)) continue;
+        if(bar.player.team != team) continue;
+        if(!isdefined(y_pos) || bar.box.bg.y < y_pos)
+        {
+            y_pos = bar.box.bg.y;
+            x_pos = bar.box.bg.x;
+            __player = bar.player;
+        }
+    }
+
+    if(!isdefined(x_pos))
+    {
+        return undefined;
+    }
+
+    stru = spawnStruct();
+    stru.x = x_pos;
+    stru.y = y_pos;
+    stru.player = __player;
+    return stru;
+}
+
+gm_get_all_teams()
+{
+    teams = [];
+    foreach(player in level.players)
+    {
+        array::add(teams, player.team, false);
+    }
+    return teams;
 }
 
 gm_hud_set_visible(visible = true)
@@ -2803,10 +3585,22 @@ gm_hud_set_visible(visible = true)
         return;
     
     self.gm_hud_hide = !visible;
-    foreach(bar in self._bars) self UpdateGMProgress(bar);
+    foreach(bar in self._bars) 
+    {
+        self UpdateGMProgress(bar);
+    }
+
+    if(isdefined(self._team_bgs))
+    {
+        foreach(bg in self._team_bgs)
+        {
+            bg.alpha = visible;
+            bg fadeOverTime(0.1);
+        }
+    }  
 }
 
-GM_GetPlayerColor(nored = false)
+GM_GetPlayerColor(nored = false, teamcolor = false)
 {
     if(!isdefined(self.score))
         self.score = 0;
@@ -2814,7 +3608,9 @@ GM_GetPlayerColor(nored = false)
     if(!nored && self.score >= self Get_PointsToWin())
         return color(0xc90e0e);
     
-    switch(self getEntityNumber())
+    ent_index = (teamcolor && is_zbr_teambased()) ? (self get_zbr_team_color_index()) : (self getEntityNumber());
+    // ent_index = self getEntityNumber();
+    switch(ent_index)
     {
         case CLIENT_BLUE:
             return color(0x59a7e3);
@@ -2828,6 +3624,23 @@ GM_GetPlayerColor(nored = false)
         default:
             return color(0xAAAAAA);
     }
+}
+
+get_zbr_team_color_index()
+{
+    return level.gm_team_colors[self.gm_id];
+}
+
+get_zbr_team_color_name()
+{
+    switch(level.gm_team_colors[self.gm_id])
+    {
+        case CLIENT_BLUE: return "Blue Team";
+        case CLIENT_GREEN: return "Green Team";
+        case CLIENT_YELLOW: return "Yellow Team";
+        default: return "White Team";
+    }
+    return "White Team";
 }
 
 UpdateGMProgress(player_or_bar, dead = false)
@@ -2886,7 +3699,21 @@ UpdateGMProgress(player_or_bar, dead = false)
         score = player.score;
         ptw = player Get_PointsToWin();
         alive = player.sessionstate == "playing";
-        objective_state = player.gm_objective_state;
+        objective_state = player.gm_objective_state;    
+
+        if(!isdefined(player.gm_hud_hide))
+        {
+            player.gm_hud_hide = false;
+        }  
+
+        if(isdefined(player._team_bgs))
+        {
+            foreach(bg in player._team_bgs)
+            {
+                bg.alpha = !player.gm_hud_hide;
+                bg fadeOverTime(0.1);
+            }
+        }  
     }
 
     SetProgressbarPercent(bar, float(score) / ptw);
@@ -2907,6 +3734,7 @@ UpdateGMProgress(player_or_bar, dead = false)
     {
         player.gm_objective_timesurvived = 0;
     }
+
     SetProgressbarSecondaryPercent(bar, player.gm_objective_timesurvived / OBJECTIVE_WIN_TIME);
 }
 
@@ -3182,4 +4010,140 @@ quick_revive_fix()
     {
         self.lives = 1;
     }
+}
+
+is_zbr_teambased()
+{
+    // the 1 > var is a hack used to enable 2v2 without recompiling in the injector
+    return (1 > ZBR_TEAMS) || (level.players.size > 4);
+}
+
+get_zbr_teamsize()
+{
+    n_teamsize = int(max(2, min(ZBR_TEAMSIZE, 8)));
+    if(level.players.size > 4)
+    {
+        // we literally dont have enough game teams for > 4 teams
+        return int(max(2, n_teamsize));
+    }
+    return n_teamsize;
+}
+
+get_zbr_teammates(b_check_alive = false)
+{
+    teammates = [];
+    if(!isdefined(self.team))
+    {
+        return teammates;
+    }
+    foreach(player in level.players)
+    {
+        if(player == self)
+        {
+            continue;
+        }
+        if(player.team != self.team)
+        {
+            continue;
+        }
+        if(b_check_alive && (player.sessionstate != "playing" || player laststand::player_is_in_laststand()))
+        {
+            continue;
+        }
+        array::add(teammates, player, false);
+    }
+    return teammates;
+}
+
+get_zbr_team_index()
+{
+    return self.gm_id;
+}
+
+find_flesh_verify(behaviortreeentity)
+{
+    if(!isdefined(behaviortreeentity))
+    {
+        return;
+    }
+    self zm_behavior::zombiefindflesh(behaviortreeentity);
+}
+
+gm_teammate_visibility()
+{
+    if(!is_zbr_teambased())
+    {
+        return;
+    }
+    if(isdefined(self.zbr_team_visibility))
+    {
+        self.zbr_team_visibility delete();
+    }
+    self.zbr_team_visibility = spawn("script_model", self geteye());
+    self.zbr_team_visibility setmodel("tag_origin");
+    self.zbr_team_visibility linkto(self, "j_helmet");
+    self.zbr_team_visibility setinvisibletoplayer(self, true);
+    self.zbr_team_visibility clientfield::set("powerup_fx", 2);
+    foreach(player in level.players)
+    {
+        if(player == self)
+        {
+            continue;
+        }
+        if(player.team != self.team)
+        {
+            self.zbr_team_visibility setinvisibletoplayer(player, true);
+            if(isdefined(player.zbr_team_visibility))
+            {
+                player.zbr_team_visibility setinvisibletoplayer(self, true);
+            }
+        }
+        else
+        {
+            self.zbr_team_visibility setinvisibletoplayer(player, false);
+            if(isdefined(player.zbr_team_visibility))
+            {
+                player.zbr_team_visibility setinvisibletoplayer(self, false);
+            }
+        }
+    }
+}
+
+get_zbr_valid_players()
+{
+    players = [];
+    foreach(player in getplayers())
+    {
+        if(player.sessionstate == "playing")
+        {
+            players[players.size] = player;
+        }
+    }
+    return players;
+}
+
+watch_in_combat()
+{
+    self endon("disconnect");
+    self endon("bled_out");
+    self endon("spawned_player");
+
+    self.gm_in_combat = false;
+    while(true)
+    {
+        msg = self util::waittill_any_timeout(5, "damage", "weapon_fired", "grenade_fire", "bulletwhizby");
+        self.gm_in_combat = (msg != "timeout");
+    }
+}
+
+custom_intermission()
+{
+    self thread [[ level._custom_intermission ]]();
+    wait 0.05;
+    self.score = isdefined(self.max_points_earned) ? self.max_points_earned : self.score;
+}
+
+gm_using_killcams()
+{
+    return IS_DEBUG && DEBUG_USE_KILLCAMS;
 }

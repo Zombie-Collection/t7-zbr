@@ -15,16 +15,30 @@ WatchMaxAmmo()
 carpenter_override(player)
 {
 	self thread zm_powerup_carpenter::grab_carpenter(player);
-	if(!isdefined(player.hasriotshield) || !player.hasriotshield) return;
-	damagemax = level.weaponriotshield.weaponstarthitpoints;
-	if(isdefined(player.weaponriotshield))
+	foreach(_player in level.players)
 	{
-		damagemax = player.weaponriotshield.weaponstarthitpoints;
+		if(_player.team != player.team)
+		{
+			continue;
+		}
+		if(_player.sessionstate != "playing")
+		{
+			continue;
+		}
+		if(!isdefined(_player.hasriotshield) || !_player.hasriotshield)
+		{
+			continue;
+		}
+		damagemax = level.weaponriotshield.weaponstarthitpoints;
+		if(isdefined(_player.weaponriotshield))
+		{
+			damagemax = _player.weaponriotshield.weaponstarthitpoints;
+		}
+		current_health = _player damageriotshield(0);
+		_player damageriotshield(-1 * (damagemax - current_health));
+		_player updateriotshieldmodel();
+		_player clientfield::set_player_uimodel("zmInventory.shield_health", 1.0f);
 	}
-	current_health = player damageriotshield(0);
-	player damageriotshield(-1 * (damagemax - current_health));
-    player updateriotshieldmodel();
-	player clientfield::set_player_uimodel("zmInventory.shield_health", 1.0f);
 }
 
 updateriotshieldmodel()
@@ -69,6 +83,7 @@ nuke_override(player)
     {
         if(person.sessionstate != "playing") continue;
         if(person == player) continue;
+		if(person.team == player.team) continue;
         person dodamage(int(person.maxhealth * 0.05), person.origin, player, player, undefined, "MOD_UNKNOWN", 0, level.weaponnone);
     }
 }
@@ -104,7 +119,20 @@ powerup_grab_get_players_override()
 		if(isdefined(player.gm_forceprone) && player.gm_forceprone) continue;
         if(!isdefined(player.team) || player.team == level.zombie_team) continue;
         if(isdefined(player.no_grab_powerup) && player.no_grab_powerup) continue;
-		if(isdefined(player.wager_powerups) && player.wager_powerups) continue;
+		if(isdefined(self.blood_hunter_points))
+		{
+			if(self.bh_owner.team == player.team)
+			{
+				continue;
+			}
+		}
+		else
+		{
+			if(isdefined(player.wager_powerups) && player.wager_powerups)
+			{
+				continue;
+			}
+		}
 		if(player is_in_altbody()) continue;
         final[final.size] = player;
         if(isalive(player.var_4bd1ce6b))
@@ -133,6 +161,17 @@ zombie_death_animscript_override()
 
 custom_zombie_powerup_drop(drop_point = (0,0,0))
 {
+	b_drop_nade = isdefined(level.gm_last_killed_ent) && !isplayer(level.gm_last_killed_ent) && isdefined(level.gm_last_killed_ent.wager_zomb_nades) && level.gm_last_killed_ent.wager_zomb_nades;
+	b_drop_nade = b_drop_nade && isdefined(level.gm_last_killed_ent.attacker) && isplayer(level.gm_last_killed_ent.attacker);
+
+	if(b_drop_nade && (randomIntRange(0, 100) <= WAGER_DROPNADE_CHANCE))
+	{
+		grenade = getweapon("frag_grenade");
+		grenade = level.gm_last_killed_ent.attacker magicgrenadetype(grenade, drop_point, vectorscale((0, 0, 1), 300), 2);
+		grenade.is_wager_grenade = true;
+		grenade.wager_owner = level.gm_last_killed_ent.attacker;
+	}
+
 	if(isdefined(level._custom_zombie_powerup_drop))
 	{
 		b_result = [[level._custom_zombie_powerup_drop]](drop_point);
@@ -204,4 +243,42 @@ custom_zombie_powerup_drop(drop_point = (0,0,0))
 	level.zombie_vars["zombie_drop_item"] = 0;
 	level notify("powerup_dropped", powerup);
 	return true;
+}
+
+watch_zombieblood()
+{
+	level endon("end_game");
+	
+	while(true)
+	{
+		level waittill("player_zombie_blood", player);
+		player thread pvp_zombie_blood_invis();
+	}
+}
+
+pvp_zombie_blood_invis()
+{
+	self endon("bled_out");
+	self endon("disconnect");
+
+	self SetInvisibleToAll();
+    self SetInvisibleToPlayer(self, false);
+	self thread show_owner_on_attack(self);
+	if(isdefined(self.invis_glow))
+    {
+        self.invis_glow delete();
+    }
+    self.invis_glow = spawn("script_model", self.origin);
+    self.invis_glow linkto(self);
+    self.invis_glow setmodel("tag_origin");
+    self.invis_glow thread clone_fx_cleanup(self.invis_glow);
+    playfxontag(level._effect["monkey_glow"], self.invis_glow, "tag_origin");
+	self waittill("zombie_blood_over");
+	self notify("show_owner");
+	self setvisibletoall();
+	if(isdefined(self.invis_glow))
+    {
+        self.invis_glow delete();
+    }
+	self show();
 }

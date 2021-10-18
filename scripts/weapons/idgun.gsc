@@ -123,7 +123,7 @@ start_timed_pvp_vortex(v_vortex_origin, n_vortex_radius, vortex_pull_duration, v
 	{
 		foreach(player in a_e_players)
 		{
-			if(!isdefined(player) || player.sessionstate != "playing" || (player == self && (!IS_DEBUG || !DEBUG_SELF_PULL)))
+			if(!isdefined(player) || (player.sessionstate != "playing") || (player == self && (!IS_DEBUG || !DEBUG_SELF_PULL)))
                 continue;
 
 			if(distance(player.origin, v_vortex_origin) > n_vortex_radius) continue;
@@ -142,7 +142,6 @@ start_timed_pvp_vortex(v_vortex_origin, n_vortex_radius, vortex_pull_duration, v
             
             player setorigin(org);
             player setvelocity(player getVelocity() + (vectornormalize(iv) * da * IDGUN_PULL_VELOCITY_PER_FRAME));
-        
             player DoDamage(int(IDGUN_DMG_PER_FRAME * db * idgun_mp), player.origin, self, undefined, "none", "MOD_UNKNOWN", 0, level.weaponNone);
 		}
 
@@ -156,6 +155,7 @@ start_timed_pvp_vortex(v_vortex_origin, n_vortex_radius, vortex_pull_duration, v
 
     foreach(player in a_e_players)
     {
+		if(!isdefined(player)) continue;
         if(player == self) continue;
         if(player.sessionstate != "playing") continue;
 		if(!isdefined(player)) continue;

@@ -1,20 +1,39 @@
 init()
 {
-    if(level.script == "zm_island") killserver();
-    level.gm_teams = array::randomize(array("allies", "neutral", "axis", "free"));
+    if(isdefined(level.__init_gm))
+    {
+        return;
+    }
+    if(DISABLE_ISLAND && level.script == "zm_island")
+    {
+        killserver();
+    }
+    level.__init_gm = true;
+    level.gm_teams = array::randomize(array("allies", "axis", "neutral", "free"));
+    level.gm_team_colors = [];
     if(STABILITY_PASS) SetDvar("developer", "2");
-    level.gm_id = 0;
+    level.gm_id = randomint(level.gm_teams.size); // randomint(level.gm_teams.size)
     level.spectatetype = 2;
     if(!IS_DEBUG || !DEBUG_REVERT_SPAWNS)
-    level.check_for_valid_spawn_near_team_callback = ::GetRandomMapSpawn;
+    level.check_for_valid_spawn_near_team_callback = serious::GetRandomMapSpawn;
     level.player_too_many_weapons_monitor = serious::nullsub; // fix bs with their weapons logic
 }
 
 on_player_connect()
 { 
-    self.gm_id = level.gm_id;
-    level.gm_id++;
+    init();
+    if(isdefined(self.gm_id))
+    {
+        return;
+    }
+    self.gm_id = int(level.gm_id / (is_zbr_teambased() ? get_zbr_teamsize() : 1));
+    level.gm_id = int((level.gm_id + 1) % level.gm_teams.size);
     self.noHitMarkers = false;
+
+    if(!isdefined(level.gm_team_colors[self.gm_id]))
+    {
+        level.gm_team_colors[self.gm_id] = self getEntityNumber();
+    }
 
     if(level.players.size > 4)
     {
@@ -39,6 +58,7 @@ get_fixed_team_name()
 
 on_player_spawned()
 {
+    self on_player_connect();
     if(FORCE_HOST && self ishost())
     {
         SetDvar("excellentPing", 3);
@@ -71,15 +91,18 @@ on_player_spawned()
         }
     }
 
-    if(level.script == "zm_cosmodrome")
+    if(level.script == "zm_cosmodrome" && !isdefined(level.cosmodrome_lander_initial_wait))
     {
         level flag::wait_till("lander_grounded");
+        level.cosmodrome_lander_initial_wait = true;
     }
 
     self thread GMSpawned();
 
     if(!isdefined(self.initial_spawn_fix))
     {
+        waittillframeend;
+        wait 0.05;
         self Try_Respawn();
         self.initial_spawn_fix = true;
     }
