@@ -6,7 +6,7 @@ Creator: Serious, https://www.youtube.com/anthonything \
 Extinct: Misc code snippets, testing. \
 ItsFebiven: Misc code snippets, testing. \
 SyGnUs: Gameplay testing, chatting. \
-Candy, Snowy, CF499, Daltax, Leaf: Gameplay testing \
+Candy, Snowy, CF499, Daltax, Leaf, ssno, AMS, Kai, Orbis, Taleb: Gameplay testing
 My youtube subs, and anyone else I forgot about at this current point in time. 
 
 
