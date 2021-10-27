@@ -302,6 +302,7 @@ apply_bgb_changes()
     level.bgb["zm_bgb_board_to_death"].enable_func = serious::bgb_btd_enable;
     level.bgb["zm_bgb_undead_man_walking"].enable_func = serious::bgb_umw_enable;
     level.bgb["zm_bgb_undead_man_walking"].limit = 60;
+    level.bgb["zm_bgb_alchemical_antithesis"].var_e25efdfd = serious::alchemical_add_to_player_score_override;
     bgb::register_lost_perk_override("zm_bgb_phoenix_up", serious::bgb_pup_lost_perk, false);
 
     level.givestartloadout = serious::bgb_arms_grace_loadout;
@@ -709,6 +710,11 @@ GMSpawned()
 {
     self endon("bled_out");
     self endon("spawned_player");
+
+    if(isdefined(level.intermission) && level.intermission)
+    {
+        return;
+    }
     
     playsoundatposition("evt_appear_3d", self.origin);
 	playsoundatposition("zmb_zombie_spawn", self.origin);
@@ -856,7 +862,8 @@ apply_pre_delay_spawn_variables()
     self.no_grab_powerup = false; // reset no grab when spawning
     self.power_vacuum = false; // reset power vacuum status
     self.bgb_freeze_dmg_protect = false; // reset damage protection
-
+    self.show_for_time = undefined;
+    
     self.var_789ebfb2 = false; // afflicted by storm bow attack
     self.zombie_tesla_hit = false; // afflicted by any tesla attack
     self.var_ca25d40c = false; // afflicted by fire bow attack
@@ -1031,7 +1038,9 @@ ZoneCollector()
         zone = self zm_zonemgr::get_player_zone();
 
         if(!isdefined(zone))
+        {
             continue;
+        }
 
         if(!isinarray(self.visited_zones, zone))
             self.visited_zones[self.visited_zones.size] = zone;
@@ -1208,6 +1217,7 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
     self.pending_damage_depth++;
     if(self laststand::player_is_in_laststand()) return damage_stack_pop(0);
     if(self.sessionstate != "playing") return damage_stack_pop(0);
+    if(iDamage < 0) return damage_stack_pop(0);
 
     if(IS_DEBUG && DEBUG_DEATHS && !(self util::is_bot()))
     {
@@ -1403,7 +1413,6 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
     
     if(IS_DEBUG && DEV_HEALTH_DEBUG)
         self iprintlnbold("Health: " + self.health + ", Max: " + self.maxhealth + ", DMG: " + result + ", Score: " + self.score);
-    
     b_is_zombie = (isdefined(attacker.is_zombie) && attacker.is_zombie);
     if(b_is_zombie && !isplayer(attacker))
     {
@@ -1658,7 +1667,14 @@ _player_damage_override(eInflictor, attacker, iDamage, iDFlags, sMeansOfDeath = 
             }
             else
             {
-                attacker zm_score::add_to_player_score(int(points_award), 1, "gm_zbr_admin");
+                if(points_award < 0)
+                {
+                    points_award = 0;
+                }
+                if(points_award)
+                {
+                    attacker zm_score::add_to_player_score(int(points_award), 1, "gm_zbr_admin");
+                }
             }
             if(!aat_response((self.health - result) <= 0, eInflictor, attacker, result, iDFlags, sMeansOfDeath, weapon, vpoint, vdir, shitloc, psoffsettime))
             {
@@ -2065,6 +2081,11 @@ Event_PointsAdjusted()
         return;
     }
 
+    if(isdefined(level.intermission) && level.intermission)
+    {
+        return;
+    }
+
     max = self Get_Pointstowin() * 3;
     if(self.score > max)
     {
@@ -2090,6 +2111,11 @@ Event_PointsAdjusted()
 
 Check_GMObjectiveState()
 {
+    if(isdefined(level.intermission) && level.intermission)
+    {
+        return;
+    }
+
     foreach(player in level.players)
         player thread UpdateGMProgress(self);
 
@@ -2139,6 +2165,11 @@ Get_Pointstowin()
 
 Event_HealthAdjusted()
 {
+    if(isdefined(level.intermission) && level.intermission)
+    {
+        return;
+    }
+
     self notify("Event_HealthAdjusted");
     self endon("Event_HealthAdjusted");
     self endon("spawned_player");
@@ -2210,7 +2241,16 @@ Round_PointScaling()
 
 Event_RoundNext()
 {
-    if(IS_DEBUG && DEBUG_NO_ROUNDNEXT) return;
+    if(IS_DEBUG && DEBUG_NO_ROUNDNEXT)
+    {
+        return;
+    }
+
+    if(isdefined(level.intermission) && level.intermission)
+    {
+        return;
+    }
+
     // scale points if we didnt restart
     if(!isdefined(level.gm_lastround))
         level.gm_lastround = level.round_number;
@@ -2705,6 +2745,11 @@ give_hero_weapon(weapon)
     self gadgetpowerset(0, 100);
     wait 1;
 	self gadgetpowerset(0, 0);
+    if(isdefined(level.weaponannihilator) && level.weaponannihilator == weapon)
+    {
+        self SetWeaponAmmoStock(weapon, 0);
+        self SetWeaponAmmoClip(weapon, 0);
+    }
 }
 
 GiveAAT(player, aat, print=true, weapon)
@@ -3138,7 +3183,7 @@ calc_player_lb_ranks()
         highest = undefined;
         foreach(player in players)
         {
-            team_match = !is_zbr_teambased() || player.team == level.gm_winner.team;
+            team_match = !is_zbr_teambased() || (player.team == level.gm_winner.team);
             if(is_zbr_teambased() && isdefined(highest) && (highest.team == level.gm_winner.team) && !team_match)
             {
                 continue;
@@ -3171,13 +3216,20 @@ get_player_lb_rank()
 
 wait_and_revive_player(text) // players killed right when objective is completed will now respawn properly
 {
+    self notify("wait_and_revive_player");
+    self endon("wait_and_revive_player");
+    self endon("disconnect");
+
     wait SPAWN_DELAY;
     if(self.sessionstate != "playing")
     {
-        self [[ level.spawnplayer ]]();
+        self thread [[ level.spawnplayer ]]();
         self thread wait_and_return_weapon();
     }
-    if(isdefined(text)) self iPrintLnBold(text);
+    if(isdefined(text))
+    {
+        self iPrintLnBold(text);
+    }
 }
 
 CleanupMusicCheck()
@@ -4014,8 +4066,13 @@ quick_revive_fix()
 
 is_zbr_teambased()
 {
-    // the 1 > var is a hack used to enable 2v2 without recompiling in the injector
-    return (1 > ZBR_TEAMS) || (level.players.size > 4);
+    // the 1 - var is a hack used to enable 2v2 without recompiling in the injector
+    // worlds first use of XNOR pepelaugh
+    // INJCT_NO_TEAMS   TEAM_VAR        RESULT
+    // 1                1               1       // source only, requesting teams
+    // 1                0               0       // source or injector, since retail ships as default no teams
+    // 0                0               1       // injector only, requesting teams
+    return (!(1 - ZBR_TEAMS)) || (level.players.size > 4);
 }
 
 get_zbr_teamsize()

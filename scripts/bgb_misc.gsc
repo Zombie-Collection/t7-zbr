@@ -485,8 +485,12 @@ bgb_idle_eyes_activate()
 	zm_bgb_idle_eyes::deactivate(players);
 }
 
-bgb_profit_sharing_override(n_points, str_awarded_by, var_1ed9bd9b)
+bgb_profit_sharing_override(n_points = 0, str_awarded_by = "none", var_1ed9bd9b = false)
 {
+	if(!isdefined(n_points))
+	{
+		return n_points;
+	}
 	if(str_awarded_by == "zm_bgb_profit_sharing")
 	{
 		return n_points;
@@ -508,11 +512,15 @@ bgb_profit_sharing_override(n_points, str_awarded_by, var_1ed9bd9b)
 	}
 	if(!var_1ed9bd9b)
 	{
-		foreach(e_player in level.players)
+		foreach(e_player in getplayers())
 		{
-			if(isdefined(e_player) && "zm_bgb_profit_sharing" == (e_player bgb::get_enabled()))
+			if(e_player.sessionstate != "playing")
 			{
-				if(isdefined(e_player.var_6638f10b) && array::contains(e_player.var_6638f10b, self))
+				continue;
+			}
+			if(isdefined(e_player) && isdefined(e_player bgb::get_enabled()) && "zm_bgb_profit_sharing" == (e_player bgb::get_enabled()))
+			{
+				if(isdefined(e_player.var_6638f10b) && isarray(e_player.var_6638f10b) && array::contains(e_player.var_6638f10b, self))
 				{
 					e_player thread zm_score::add_to_player_score(n_points, 1, "zm_bgb_profit_sharing");
 				}
@@ -523,6 +531,10 @@ bgb_profit_sharing_override(n_points, str_awarded_by, var_1ed9bd9b)
 	{
 		foreach(e_player in self.var_6638f10b)
 		{
+			if(e_player.sessionstate != "playing")
+			{
+				continue;
+			}
 			if(isdefined(e_player) && e_player.team == self.team)
 			{
 				e_player thread zm_score::add_to_player_score(n_points, 1, "zm_bgb_profit_sharing");
@@ -997,4 +1009,58 @@ bgb_opposing_umw()
 		}
 	}
 	return false;
+}
+
+alchemical_add_to_player_score_override(points = 0, str_awarded_by, var_1ed9bd9b)
+{
+	if(!(isdefined(self.var_3244073f) && self.var_3244073f))
+	{
+		return points;
+	}
+
+	var_4375ef8a = int(points / 10);
+	current_weapon = self getcurrentweapon();
+	if(!isdefined(current_weapon))
+	{
+		return points;
+	}
+
+	if(zm_utility::is_offhand_weapon(current_weapon))
+	{
+		return points;
+	}
+
+	if(isdefined(self.is_drinking) && self.is_drinking)
+	{
+		return points;
+	}
+
+	if(current_weapon == level.weaponrevivetool)
+	{
+		return points;
+	}
+
+	var_b8f62d73 = self getweaponammostock(current_weapon);
+	var_b8f62d73 = var_b8f62d73 + var_4375ef8a;
+	self setweaponammostock(current_weapon, var_b8f62d73);
+	self thread alchemical_grant_ammo();
+	return 0;
+}
+
+alchemical_grant_ammo()
+{
+	if(!isdefined(self.var_82764e33))
+	{
+		self.var_82764e33 = 0;
+	}
+	if(!self.var_82764e33)
+	{
+		self.var_82764e33 = 1;
+		self playsoundtoplayer("zmb_bgb_alchemical_ammoget", self);
+		wait(0.5);
+		if(isdefined(self))
+		{
+			self.var_82764e33 = 0;
+		}
+	}
 }

@@ -12,11 +12,15 @@ is_idgun_damage(weapon)
 
 is_upgraded_idgun(weapon)
 {
+	if(!isdefined(weapon))
+	{
+		return false;
+	}
 	if(is_idgun_damage(weapon) && zm_weapons::is_weapon_upgraded(weapon))
 	{
-		return 1;
+		return true;
 	}
-	return 0;
+	return false;
 }
 
 monitor_idgun()
@@ -116,7 +120,7 @@ start_timed_pvp_vortex(v_vortex_origin, n_vortex_radius, vortex_pull_duration, v
 	n_vortex_time_sv = vortex_pull_duration;
 	n_vortex_time_cl = vortex_pull_duration;
 	n_vortex_time = n_vortex_time_sv * 1000;
-    idgun_mp = is_upgraded_idgun(weapon) ? IDGUN_SCALAR_UPGRADED : 1;
+    idgun_mp = ((!isdefined(level.var_453e74a0) || weapon != level.var_453e74a0) && is_upgraded_idgun(weapon)) ? IDGUN_SCALAR_UPGRADED : 1;
 
 	arrayremovevalue(a_e_players, self, false);
 	while(n_currtime <= n_vortex_time)
@@ -125,6 +129,11 @@ start_timed_pvp_vortex(v_vortex_origin, n_vortex_radius, vortex_pull_duration, v
 		{
 			if(!isdefined(player) || (player.sessionstate != "playing") || (player == self && (!IS_DEBUG || !DEBUG_SELF_PULL)))
                 continue;
+
+			if(player laststand::player_is_in_laststand())
+			{
+				continue;
+			}
 
 			if(distance(player.origin, v_vortex_origin) > n_vortex_radius) continue;
             
@@ -141,8 +150,8 @@ start_timed_pvp_vortex(v_vortex_origin, n_vortex_radius, vortex_pull_duration, v
                 org = org + (0,0,10);
             
             player setorigin(org);
-            player setvelocity(player getVelocity() + (vectornormalize(iv) * da * IDGUN_PULL_VELOCITY_PER_FRAME));
-            player DoDamage(int(IDGUN_DMG_PER_FRAME * db * idgun_mp), player.origin, self, undefined, "none", "MOD_UNKNOWN", 0, level.weaponNone);
+            player setvelocity(player getVelocity() + (vectornormalize(iv) * (da * da) * IDGUN_PULL_VELOCITY_PER_FRAME));
+            player DoDamage(int(IDGUN_DMG_PER_FRAME * db * idgun_mp), player.origin, self, self, "none", "MOD_UNKNOWN", 0, level.weaponNone);
 		}
 
 		wait 0.05;
@@ -158,10 +167,11 @@ start_timed_pvp_vortex(v_vortex_origin, n_vortex_radius, vortex_pull_duration, v
 		if(!isdefined(player)) continue;
         if(player == self) continue;
         if(player.sessionstate != "playing") continue;
+		if(player laststand::player_is_in_laststand()) continue;
 		if(!isdefined(player)) continue;
 		if(distance(player.origin, v_vortex_origin) > n_vortex_explosion_radius) continue;
         player.launch_magnitude_extra = 100;
         player.v_launch_direction_extra = (0,0,0.75);
-        player DoDamage(dmg * idgun_mp, player.origin, self, undefined, "none", "MOD_UNKNOWN", 0, level.weaponNone);
+        player DoDamage(int(dmg * idgun_mp), player.origin, self, self, "none", "MOD_UNKNOWN", 0, level.weaponNone);
     }	
 }

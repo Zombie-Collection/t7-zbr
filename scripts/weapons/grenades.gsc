@@ -181,6 +181,10 @@ hide_owner(owner)
 
 in_plain_sight_effect(state = false, b_zombieblood = false)
 {
+    // if(b_zombieblood)
+    // {
+    //     return;
+    // }
     s_effect = b_zombieblood ? "zm_tomb_in_plain_sight" : "zm_bgb_in_plain_sight";
     if(state)
     {
@@ -218,6 +222,7 @@ show_owner_on_attack(owner, b_zombie_blood = false)
 show_briefly(showtime, b_zombie_blood = false)
 {
 	self endon("show_owner");
+    self endon("bled_out");
     self endon("disconnect");
 	if(isdefined(self.show_for_time))
 	{
@@ -234,6 +239,7 @@ show_briefly(showtime, b_zombie_blood = false)
 		wait(0.05);
 	}
     self in_plain_sight_effect(true, b_zombie_blood);
+    playsoundatposition("evt_disappear_3d", self.origin);
     if(self.sessionstate == "playing")
     {
         self SetInvisibleToAll();

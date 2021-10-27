@@ -263,7 +263,7 @@ pvp_zombie_blood_invis()
 
 	self SetInvisibleToAll();
     self SetInvisibleToPlayer(self, false);
-	self thread show_owner_on_attack(self);
+	self thread show_owner_on_attack(self, true);
 	if(isdefined(self.invis_glow))
     {
         self.invis_glow delete();
@@ -281,4 +281,8 @@ pvp_zombie_blood_invis()
         self.invis_glow delete();
     }
 	self show();
+	wait 2;
+	self stoploopsound(1);
+	visionset_mgr::deactivate("visionset", "zm_tomb_in_plain_sight", self);
+	visionset_mgr::deactivate("overlay", "zm_tomb_in_plain_sight", self);
 }

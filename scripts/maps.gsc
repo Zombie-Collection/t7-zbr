@@ -339,7 +339,7 @@ GetRandStartZone(player, return_struct)
     return GetSpawnFromZone(player, return_struct, spawn_zone);
 }
 
-GetAllSpawnsFromZone(player, zone)
+GetAllSpawnsFromZone(player, zone = "none")
 {
     respawn_points = struct::get_array("player_respawn_point", "targetname");
     target_zone = level.zones[zone];
@@ -445,8 +445,15 @@ GetGMSpawn(player, return_struct, no_start = false)
 
 get_ideal_spawn_location(player, zone)
 {
-    if(isdefined(level.gm_blacklisted) && isinarray(level.gm_blacklisted, zone))
+    if(!isdefined(zone))
+    {
         return undefined;
+    }
+
+    if(isdefined(level.gm_blacklisted) && isinarray(level.gm_blacklisted, zone))
+    {
+        return undefined;
+    }
     
     // are there any players in this zone?
     players = zm_zonemgr::get_players_in_zone(zone, true);

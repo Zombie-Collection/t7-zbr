@@ -97,7 +97,8 @@ do_wolfbow_knockback(e_player, projectile_array, v_forward)
 	base_projectile endon("mechz_impact");
 	v_forward_angles = vectortoangles(v_forward);
 	max_range = 500;
-	while(1)
+	n_time = 0;
+	while(n_time < 5)
 	{
 		players = getplayers();
         arrayremovevalue(players, e_player, false);
@@ -139,6 +140,7 @@ do_wolfbow_knockback(e_player, projectile_array, v_forward)
                 enemy_player.v_launch_direction_extra = v_launch_base + (0,0,6);
 			}
 		}
+		n_time += 0.1;
 		wait(0.1);
 	}
 }
@@ -581,13 +583,22 @@ acquire_demon_position(v_position, v_normal)
 
 create_demon_chomper(position, v_angles, n_count = 1)
 {
+	if(!isdefined(level.demon_chopper_id))
+	{
+		level.demon_chopper_id = -1;
+	}
+
+	level.demon_chopper_id++;
+
 	chomper = util::spawn_model("c_zom_chomper", position, v_angles);
 	chomper clientfield::set("demongate_chomper_fx", 1);
 	chomper flag::init("chomper_attacking");
 	chomper flag::init("demongate_chomper_despawning");
 	chomper.var_fcd07456 = level.round_number * BOW_DEMONGATE_SKULL_TOTALDAMAGE;
 	chomper.var_603f1f19 = 1;
+	chomper.demon_chopper_id = level.demon_chopper_id;
 	chomper thread chomper_lifetime();
+	level notify("new_chomper", chomper);
 	return chomper;
 }
 
@@ -650,7 +661,7 @@ chomper_lifetime()
     level endon("game_ended");
 	self endon("demongate_chomper_despawning");
 	self.n_timer = 0;
-	while(self.n_timer < 3)
+	while((self.n_timer < 3) && ((level.demon_chopper_id - self.demon_chopper_id) < MAX_DEMON_CHOMPERS))
 	{
 		if(!self flag::get("chomper_attacking") && (!(isdefined(self.var_e3146903) && self.var_e3146903)))
 		{
@@ -658,10 +669,21 @@ chomper_lifetime()
 		}
 		wait(0.05);
 	}
-	while(self flag::get("chomper_attacking"))
+	while(self flag::get("chomper_attacking") && ((level.demon_chopper_id - self.demon_chopper_id) < MAX_DEMON_CHOMPERS))
 	{
 		wait(0.1);
 	}
+
+	// quick kill cause of resources
+	if(!((level.demon_chopper_id - self.demon_chopper_id) < MAX_DEMON_CHOMPERS))
+	{
+		self flag::set("demongate_chomper_despawning");
+		self clientfield::set("demongate_chomper_fx", 0);
+		self notify("hash_16664ab4");
+		self delete();
+		return;
+	}
+
 	self thread chomper_death();
 }
 

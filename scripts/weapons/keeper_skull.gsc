@@ -205,7 +205,6 @@ detour zm_island_skullquest<scripts\zm\zm_island_skullweapon_quest.gsc>::functio
 		{
 			if(isdefined(self.archetype) && self.archetype == "zombie")
 			{
-                level.players[0] iPrintLnBold("test");
 				self thread zombie_utility::zombie_eye_glow_stop();
 				self clientfield::set("death_ray_shock_eye_fx", 1);
 				self scene::play("cin_zm_dlc1_zombie_dth_deathray_04", self);

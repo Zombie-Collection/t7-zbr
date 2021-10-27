@@ -211,8 +211,8 @@
 #define MOON_WAVEGUN_ALTFIRE_DMG = 1000;
 
 // Radius to start doing damage to players with bhb
-// default value: 1000
-#define BLACKHOLEBOMB_MIN_DMG_RADIUS = 1000;
+// default value: 250
+#define BLACKHOLEBOMB_MIN_DMG_RADIUS = 250;
 
 // AAT deadwire damage scaled by the round number
 // default value: 1000
@@ -550,6 +550,10 @@
 // default value: 750
 #define DMG_KEEPER_ATK_ELSE = 750;
 
+// maximum number of chompers from the demon bow on der eisendrache (global)
+// default value: 10
+#define MAX_DEMON_CHOMPERS = 10;
+
 #endregion
 
 ///////////////////////////
@@ -877,7 +881,7 @@
 
 // When defined, awards the host this weapon on spawn
 // default value: undefined
-#define DEBUG_WEAPON = undefined;
+#define DEBUG_WEAPON = "hero_annihilator";
 
 // When true, will print debugging info to notepad when players die
 // default value: false

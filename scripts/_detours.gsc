@@ -116,6 +116,8 @@ detour system<scripts\shared\system_shared.gsc>::register(str_system, func_prein
             case "zm_genesis_companion":
             case "zm_trap_electric":
             case "zm_island_skullquest":
+            case "tomb_magicbox":
+            case "zm_weap_black_hole_bomb":
                 compiler::relinkdetours();
             break;
         }
@@ -382,6 +384,85 @@ detour zm_castle_weap_quest_upgrade<scripts\zm\zm_castle_weap_quest_upgrade.gsc>
 detour zm_perks<scripts\zm\_zm_perks.gsc>::perk_set_max_health_if_jugg(str_perk, set_premaxhealth, clamp_health_to_max_health)
 {
     // do nothing, because juggernog works differently in our mode
+}
+
+detour zm_weap_black_hole_bomb<scripts\zm\_zm_weap_black_hole_bomb.gsc>::function_bf9781f8(player)
+{
+    player endon("disconnect");
+    player endon("bled_out");
+	while(level.var_4af7fb42.size > 0)
+	{
+        if(!isdefined(player) || player laststand::player_is_in_laststand())
+        {
+            return;
+        }
+		var_a81ad02a = 2147483647;
+		foreach(bhb in level.var_4af7fb42)
+		{
+			curr_dist = distancesquared(player.origin, bhb.origin);
+			if(curr_dist < var_a81ad02a)
+			{
+				var_a81ad02a = curr_dist;
+			}
+		}
+        
+        if(var_a81ad02a < 0) continue;
+		if(var_a81ad02a < 262144)
+		{
+			visionset_mgr::set_state_active(player, 1 - (var_a81ad02a / 262144));
+		}
+		wait(0.05);
+	}
+}
+
+// maybe detour isinarray as well?
+detour zm<scripts\zm\_zm.gsc>::is_idgun_damage(weapon)
+{
+    if(!isdefined(weapon))
+    {
+        return false;
+    }
+    if(isdefined(level.idgun_weapons))
+	{
+		if(isinarray(level.idgun_weapons, weapon))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+detour idgun<scripts\zm\_zm_weap_idgun.gsc>::is_idgun_damage(weapon)
+{
+    if(!isdefined(weapon))
+    {
+        return false;
+    }
+    if(isdefined(level.idgun_weapons))
+	{
+		if(isinarray(level.idgun_weapons, weapon))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+detour _zm_weap_elemental_bow_wolf_howl<scripts\zm\_zm_weap_elemental_bow_wolf_howl.gsc>::function_2abb74b7(e_player, var_8f0f462c, var_c807e383)
+{
+    if(!isdefined(level.function_2abb74b7))
+    {
+        level.function_2abb74b7 = @_zm_weap_elemental_bow_wolf_howl<scripts\zm\_zm_weap_elemental_bow_wolf_howl.gsc>::function_2abb74b7;
+    }
+
+    var_28388a90 = var_8f0f462c[0];
+    var_28388a90 endon("movedone");
+	var_28388a90 endon("mechz_impact");
+    self thread [[ level.function_2abb74b7 ]](e_player, var_8f0f462c, var_c807e383);
+
+    // force a max lifetime of the projectile
+    wait 5;
+    var_28388a90 notify("movedone");
 }
 
 #endregion
